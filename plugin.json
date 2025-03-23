@@ -1,11 +1,11 @@
 {
-    "id": "com.mattermost.plugin-starter-template",
-    "name": "Plugin Starter Template",
-    "description": "This plugin serves as a starting point for writing a Mattermost plugin.",
-    "homepage_url": "https://github.com/mattermost/mattermost-plugin-starter-template",
-    "support_url": "https://github.com/mattermost/mattermost-plugin-starter-template/issues",
+    "id": "org.emfcamp.mattermost-plugin-uffd",
+    "name": "UFFD Plugin",
+    "description": "This plugin syncs groups from UFFD to mattermost",
+    "homepage_url": "https://github.com/lukegb/mattermost-plugin-uffd",
+    "support_url": "https://github.com/lukegb/mattermost-plugin-uffd/issues",
     "icon_path": "assets/starter-template-icon.svg",
-    "min_server_version": "6.2.1",
+    "min_server_version": "10.7.0",
     "server": {
         "executables": {
             "linux-amd64": "server/dist/plugin-linux-amd64",
@@ -21,6 +21,47 @@
     "settings_schema": {
         "header": "",
         "footer": "",
-        "settings": []
+        "settings": [
+		{
+			"key": "SyncGroupRegex",
+			"display_name": "Regex for groups to sync",
+			"type": "text",
+			"help_text": "A (fully-anchored) regex that must match in order for a group to sync. If left empty, all groups will be synced. Any groups not matching this regex that were previously synced by this plugin will be removed on the next sync.",
+			"placeholder": "^mattermost_.*$",
+			"default": ""
+		},
+		{
+			"key": "SyncInterval",
+			"display_name": "Sync interval",
+			"type": "text",
+			"help_text": "A Golang-style duration string (e.g. 15m for 15 minutes) for the time between sync attempts.",
+			"placeholder": "15m",
+			"default": "15m"
+		},
+		{
+			"key": "UffdAddress",
+			"display_name": "Uffd address",
+			"type": "text",
+			"help_text": "The endpoint of the Uffd instance to sync to.",
+			"placeholder": "https://identity.emfcamp.org",
+			"default": ""
+		},
+		{
+			"key": "UffdApiUser",
+			"display_name": "Uffd API user",
+			"type": "text",
+			"help_text": "The username of the Uffd API user to use for syncing. Must have the user permission.",
+			"placeholder": "",
+			"default": ""
+		},
+		{
+			"key": "UffdApiPassword",
+			"display_name": "Uffd API password",
+			"type": "text",
+			"help_text": "The password of the Uffd API user to use for syncing.",
+			"placeholder": "",
+			"default": ""
+		}
+	]
     }
 }

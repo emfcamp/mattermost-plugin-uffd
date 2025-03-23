@@ -1,10 +1,31 @@
 package main
 
 import (
+	"encoding/json"
 	"reflect"
+	"time"
 
 	"github.com/pkg/errors"
 )
+
+type configurationDuration time.Duration
+
+func (c configurationDuration) MarshalJSON() ([]byte, error) {
+	return json.Marshal(time.Duration(c).String())
+}
+
+func (c *configurationDuration) UnmarshalJSON(data []byte) error {
+	var ds string
+	if err := json.Unmarshal(data, &ds); err != nil {
+		return err
+	}
+	d, err := time.ParseDuration(ds)
+	if err != nil {
+		return err
+	}
+	*c = configurationDuration(d)
+	return nil
+}
 
 // configuration captures the plugin's external configuration as exposed in the Mattermost server
 // configuration, as well as values computed from the configuration. Any public fields will be
@@ -18,6 +39,25 @@ import (
 // If you add non-reference types to your configuration struct, be sure to rewrite Clone as a deep
 // copy appropriate for your types.
 type configuration struct {
+	// SyncGroupRegex defines a regexp that must match in order for a group
+	// to sync. If empty, all groups will be synced. Any groups not
+	// matching this regex that were previously synced by this plugin will
+	// be removed.
+	SyncGroupRegex string
+
+	// SyncInterval is the interval at which groups will be synced. Note
+	// that syncing can also be triggered by hitting the "sync" endpoint.
+	SyncInterval configurationDuration
+
+	// UffdAddress is the address of the UFFD instance (the base), from
+	// which the API endpoints will be derived.
+	UffdAddress string
+
+	// UffdApiUser is the username used for authenticating with the UFFD API.
+	UffdApiUser string
+
+	// UffdApiPassword is the password used for authenticating with the UFFD API.
+	UffdApiPassword string
 }
 
 // Clone shallow copies the configuration. Your implementation may require a deep copy if
@@ -78,6 +118,8 @@ func (p *Plugin) OnConfigurationChange() error {
 	}
 
 	p.setConfiguration(configuration)
+
+	p.rescheduleSync()
 
 	return nil
 }
