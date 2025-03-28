@@ -454,8 +454,6 @@ func (p *Plugin) resyncTeam(teamID string, syncables []*model.GroupSyncable) err
 	toAdd := wantMembersUnpartitioned.Difference(gotMembersUnpartitioned)
 	toRemove := gotMembersUnpartitioned.Difference(wantMembersUnpartitioned)
 
-	p.API.LogDebug("XXX want/got", "got", gotMembers, "want", wantMembers)
-
 	mutateTeamMember := func(tm *model.TeamMember) error {
 		roles := stringset.FromSlice(tm.GetRoles())
 		mutatedRoles := false
