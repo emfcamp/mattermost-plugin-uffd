@@ -109,6 +109,19 @@ func (p *Plugin) OnDeactivate() error {
 	return nil
 }
 
+// UserWillLogIn triggers before the user logs in.
+func (p *Plugin) UserWillLogIn(c *plugin.Context, user *model.User) string {
+	if user.Props != nil && user.Props["uffd/username"] != user.Username {
+		user.Username = user.Props["uffd/username"]
+		var appErr *model.AppError
+		user, appErr = p.API.UpdateUser(user)
+		if appErr != nil {
+			p.API.LogError("Updating username on login failed", "user", user, "err", appErr)
+		}
+	}
+	return "" // empty string permits login
+}
+
 // This will execute the commands that were registered in the NewCommandHandler function.
 func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*model.CommandResponse, *model.AppError) {
 	response, err := p.commandClient.Handle(args)

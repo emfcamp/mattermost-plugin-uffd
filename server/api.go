@@ -13,10 +13,10 @@ import (
 func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Request) {
 	router := mux.NewRouter()
 
-	// Middleware to require that the user is logged in
-	router.Use(p.MattermostAuthorizationRequired)
+	router.HandleFunc("/login", p.HttpSyncThenLogin).Methods(http.MethodGet)
 
 	apiRouter := router.PathPrefix("/api/v1").Subrouter()
+	apiRouter.Use(p.MattermostAuthorizationRequired)
 	// No particular permissions are required to force a sync (at the moment...)
 	apiRouter.HandleFunc("/sync", p.HttpSyncNow).Methods(http.MethodPost)
 
@@ -33,6 +33,16 @@ func (p *Plugin) MattermostAuthorizationRequired(next http.Handler) http.Handler
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// e.g. http://localhost:8065/plugins/org.emfcamp.mattermost-plugin-uffd/login
+func (p *Plugin) HttpSyncThenLogin(w http.ResponseWriter, r *http.Request) {
+	if err := p.runSync("HTTP /login"); err != nil {
+		http.Redirect(w, r, "/error", http.StatusSeeOther)
+		return
+	}
+
+	http.Redirect(w, r, "/oauth/openid/login", http.StatusSeeOther)
 }
 
 func (p *Plugin) HttpSyncNow(w http.ResponseWriter, r *http.Request) {
