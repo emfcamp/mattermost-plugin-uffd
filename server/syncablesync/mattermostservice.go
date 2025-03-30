@@ -18,6 +18,9 @@ const (
 
 type Mattermost struct {
 	API mattermostAPI
+
+	SystemAdminGroup   string
+	SystemManagerGroup string
 }
 
 var _ ServiceAPI = ((*Mattermost)(nil))
@@ -25,6 +28,7 @@ var _ ServiceAPI = ((*Mattermost)(nil))
 type mattermostAPI interface {
 	mattermostChannelAPI
 	mattermostTeamAPI
+	mattermostSystemRoleAPI
 
 	GetGroupsBySource(model.GroupSource) ([]*model.Group, *model.AppError)
 	GetGroupMemberUsers(groupID string, page, perPage int) ([]*model.User, *model.AppError)
@@ -36,11 +40,13 @@ var _ mattermostAPI = ((plugin.API)(nil))
 const (
 	mattermostSyncableTypeChannel = SyncableType(model.GroupSyncableTypeChannel)
 	mattermostSyncableTypeTeam    = SyncableType(model.GroupSyncableTypeTeam)
+
+	mattermostSyncableTypeSystemRole = SyncableType("system_role")
 )
 
 func (m *Mattermost) SortSyncableTargets(st []SyncableTarget) {
 	// Teams first, then Channels
-	typeOrder := []SyncableType{mattermostSyncableTypeTeam, mattermostSyncableTypeChannel}
+	typeOrder := []SyncableType{mattermostSyncableTypeSystemRole, mattermostSyncableTypeTeam, mattermostSyncableTypeChannel}
 	slices.SortFunc(st, func(a, b SyncableTarget) int {
 		aType, bType := slices.Index(typeOrder, a.Type), slices.Index(typeOrder, b.Type)
 		switch {
@@ -59,8 +65,9 @@ func (m *Mattermost) SortSyncableTargets(st []SyncableTarget) {
 
 func (m *Mattermost) SyncableHandlers() map[SyncableType]SyncableHandler {
 	return map[SyncableType]SyncableHandler{
-		mattermostSyncableTypeChannel: &mattermostChannelHandler{m.API},
-		mattermostSyncableTypeTeam:    &mattermostTeamHandler{m.API},
+		mattermostSyncableTypeSystemRole: &mattermostSystemRoleHandler{m.API},
+		mattermostSyncableTypeChannel:    &mattermostChannelHandler{m.API},
+		mattermostSyncableTypeTeam:       &mattermostTeamHandler{m.API},
 	}
 }
 
@@ -106,6 +113,23 @@ func (m *Mattermost) FetchGroupsAndSyncables(ctx context.Context) ([]Group, erro
 					ServiceType: gs,
 				})
 			}
+		}
+
+		if m.SystemAdminGroup != "" && group.GetName() == m.SystemAdminGroup {
+			syncables = append(syncables, Syncable{
+				Target: SyncableTarget{
+					Type: mattermostSyncableTypeSystemRole,
+					ID:   "system_admin",
+				},
+			})
+		}
+		if m.SystemManagerGroup != "" && group.GetName() == m.SystemManagerGroup {
+			syncables = append(syncables, Syncable{
+				Target: SyncableTarget{
+					Type: mattermostSyncableTypeSystemRole,
+					ID:   "system_manager",
+				},
+			})
 		}
 
 		out = append(out, Group{

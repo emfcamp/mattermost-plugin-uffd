@@ -50,7 +50,7 @@ func (h *mattermostChannelHandler) FetchRoster(ctx context.Context, st SyncableT
 }
 
 func (h *mattermostChannelHandler) AddMembers(ctx context.Context, st SyncableTarget, rms []RosterMember) error {
-	// TODO(lukegb): if a member is supposed to be a member of a channel, but isn't a member of the enclosing team, what do we do?
+	// TODO: if a member is supposed to be a member of a channel, but isn't a member of the enclosing team, what do we do?
 	// Maybe we should add them to the team automatically?
 	if st.Type != mattermostSyncableTypeChannel {
 		return fmt.Errorf("passed wrong SyncableTarget %#v, can only handle %v", st, mattermostSyncableTypeChannel)

@@ -15,6 +15,7 @@ type fakeMattermost struct {
 	syncables      []*model.GroupSyncable
 	groups         []*model.Group
 	groupMembers   map[string][]string
+	users          []*model.User
 }
 
 // AddUserToChannel implements mattermostAPI.
@@ -160,11 +161,60 @@ func (f *fakeMattermost) UpdateTeamMemberRoles(teamID string, userID string, rol
 	return nil, model.NewAppError("test", "test", nil, "no such member", 404)
 }
 
+// GetUsers implements mattermostAPI.
+func (f *fakeMattermost) GetUsers(opts *model.UserGetOptions) ([]*model.User, *model.AppError) {
+	var users []*model.User
+	for _, u := range f.users {
+		matches := true
+		if opts.Role != "" {
+			matches = matches && u.IsInRole(opts.Role)
+		}
+		if len(opts.Roles) > 0 {
+			matchedRole := false
+			for _, r := range opts.Roles {
+				matchedRole = matchedRole || u.IsInRole(r)
+				if matchedRole {
+					break
+				}
+			}
+			matches = matches && matchedRole
+		}
+		if matches {
+			users = append(users, u.DeepCopy())
+		}
+	}
+	return slicePage(users, opts.Page, opts.PerPage), nil
+}
+
+// GetUsers implements mattermostAPI.
+func (f *fakeMattermost) GetUser(userID string) (*model.User, *model.AppError) {
+	for _, u := range f.users {
+		if u.Id == userID {
+			return u.DeepCopy(), nil
+		}
+	}
+	return nil, model.NewAppError("test", "test", nil, "no such user", 404)
+}
+
+// UpdateUserRoles implements mattermostAPI.
+func (f *fakeMattermost) UpdateUserRoles(userID string, newRoles string) (*model.User, *model.AppError) {
+	for _, u := range f.users {
+		if u.Id == userID {
+			u.Roles = newRoles
+			return u.DeepCopy(), nil
+		}
+	}
+	return nil, model.NewAppError("test", "test", nil, "no such user", 404)
+}
+
 var _ mattermostAPI = ((*fakeMattermost)(nil))
+
+func ptr[T any](v T) *T { return &v }
 
 func TestFetchGroupsAndSyncables(t *testing.T) {
 	testGroup := &model.Group{
 		Id:           "group:::test",
+		Name:         ptr("test"),
 		HasSyncables: true,
 	}
 	testGroupChannelSyncable := &model.GroupSyncable{
@@ -182,6 +232,7 @@ func TestFetchGroupsAndSyncables(t *testing.T) {
 
 	testAdminGroup := &model.Group{
 		Id:           "group:::admin",
+		Name:         ptr("admin"),
 		HasSyncables: true,
 	}
 	testAdminGroupChannelSyncable := &model.GroupSyncable{
@@ -213,6 +264,8 @@ func TestFetchGroupsAndSyncables(t *testing.T) {
 				testAdminGroupTeamSyncable,
 			},
 		},
+
+		SystemAdminGroup: "admin",
 	}
 	got, err := m.FetchGroupsAndSyncables(context.Background())
 	if err != nil {
@@ -221,6 +274,7 @@ func TestFetchGroupsAndSyncables(t *testing.T) {
 
 	want := []Group{{
 		ID:      "group:::test",
+		Name:    "test",
 		Members: []string{"userBoth", "userUser"},
 		Syncables: []Syncable{
 			{Target: SyncableTarget{Type: "Channel", ID: "channel:::test"}, ServiceType: testGroupChannelSyncable},
@@ -229,6 +283,7 @@ func TestFetchGroupsAndSyncables(t *testing.T) {
 		ServiceType: testGroup,
 	}, {
 		ID:      "group:::admin",
+		Name:    "admin",
 		Members: []string{"userBoth", "userAdmin"},
 		Syncables: []Syncable{
 			{
@@ -240,6 +295,9 @@ func TestFetchGroupsAndSyncables(t *testing.T) {
 				Target:      SyncableTarget{Type: "Team", ID: "team:::test"},
 				ServiceType: testAdminGroupTeamSyncable,
 				GrantsAdmin: true,
+			},
+			{
+				Target: SyncableTarget{Type: mattermostSyncableTypeSystemRole, ID: "system_admin"},
 			},
 		},
 		ServiceType: testAdminGroup,

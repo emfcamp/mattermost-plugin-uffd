@@ -34,8 +34,24 @@
 			"key": "EnabledGroup",
 			"display_name": "Name of group that gates access to Mattermost in uffd",
 			"type": "text",
-			"help_text": "The name of the group which gates access to Mattermost in uffd. If set, then users who are no longer in this group will have their Mattermost account disabled. If left empty, then users will only have their Mattermost account disabled if their uffd account is disabled.",
+			"help_text": "The name of the group which gates access to Mattermost in uffd. If set, then users who are no longer in this group will have their Mattermost account disabled. If left empty, then users will only have their Mattermost account disabled if their uffd account is disabled. This group doesn't need to be matched by the sync regex.",
 			"placeholder": "mattermost_access",
+			"default": ""
+		},
+		{
+			"key": "SystemAdminGroup",
+			"display_name": "Name of uffd group that will grant System Admin permissions",
+			"type": "text",
+			"help_text": "A group which will grant the System Admin role. If non-empty, then users in this group will be added to the System Admin role, and removed if they are not present in the group. This only affects users synced from the IdP: locally-created users will not be touched.",
+			"placeholder": "mattermost_admin",
+			"default": ""
+		},
+		{
+			"key": "SystemManagerGroup",
+			"display_name": "Name of uffd group that will grant System Manager permissions",
+			"type": "text",
+			"help_text": "A group which will grant the System Manager role. If non-empty, then users in this group will be added to the System Manager role, and removed if they are not present in the group. This only affects users synced from the IdP: locally-created users will not be touched.",
+			"placeholder": "mattermost_manager",
 			"default": ""
 		},
 		{

@@ -51,6 +51,12 @@ type configuration struct {
 	// If empty, Mattermost users will only be disabled if they are disabled in uffd (and not if they no longer have access to Mattermost).
 	EnabledGroup string
 
+	// SystemAdminGroup defines the name of a group that will be synced to the system_admin role.
+	SystemAdminGroup string
+
+	// SystemManagerGroup defines the name of a group that will be synced to the system_manager role.
+	SystemManagerGroup string
+
 	// SyncInterval is the interval at which groups will be synced. Note
 	// that syncing can also be triggered by hitting the "sync" endpoint.
 	SyncInterval configurationDuration

@@ -45,7 +45,9 @@ func (p *Plugin) runSync(ctx context.Context, trigger string) error {
 	l.Info("Performing syncables sync")
 	ss := &syncablesync.Engine{
 		API: &syncablesync.Mattermost{
-			API: p.API,
+			API:                p.API,
+			SystemAdminGroup:   cfg.SystemAdminGroup,
+			SystemManagerGroup: cfg.SystemManagerGroup,
 		},
 	}
 	if err := ss.FullSync(ctx); err != nil {
