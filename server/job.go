@@ -28,8 +28,9 @@ func (p *Plugin) runSync(ctx context.Context, trigger string) error {
 	l.Info("Performing UFFD group sync")
 	se := &syncengine.SyncEngine{
 		IdP: &syncengine.UffdIdP{
-			API:          p.uffd,
-			EnabledGroup: cfg.EnabledGroup,
+			API:              p.uffd,
+			EnabledGroup:     cfg.EnabledGroup,
+			GroupFilterRegex: cfg.SyncGroupRegex,
 		},
 		Service: &syncengine.MattermostService{
 			API: p.API,
