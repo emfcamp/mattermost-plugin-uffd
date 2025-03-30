@@ -6,8 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lukegb/mattermost-plugin-uffd/server/command"
-	"github.com/lukegb/mattermost-plugin-uffd/server/store/kvstore"
 	"github.com/lukegb/mattermost-plugin-uffd/server/syncengine"
 	"github.com/lukegb/mattermost-plugin-uffd/server/uffd"
 
@@ -22,14 +20,8 @@ import (
 type Plugin struct {
 	plugin.MattermostPlugin
 
-	// kvstore is the client used to read/write KV records for this plugin.
-	kvstore kvstore.KVStore
-
 	// client is the Mattermost server API client.
 	client *pluginapi.Client
-
-	// commandClient is the client used to register and execute slash commands.
-	commandClient command.Command
 
 	// uffd is the Uffd API.
 	uffd *uffd.API
@@ -76,10 +68,6 @@ func (p *Plugin) OnActivate() error {
 	p.client = pluginapi.NewClient(p.API, p.Driver)
 
 	pluginapi.ConfigureLogrus(log.StandardLogger(), p.client)
-
-	p.kvstore = kvstore.NewKVStore(p.client)
-
-	p.commandClient = command.NewCommandHandler(p.client)
 
 	cfg := p.getConfiguration()
 	p.uffd = &uffd.API{
@@ -129,15 +117,6 @@ func (p *Plugin) UserWillLogIn(c *plugin.Context, user *model.User) string {
 		}
 	}
 	return "" // empty string permits login
-}
-
-// This will execute the commands that were registered in the NewCommandHandler function.
-func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*model.CommandResponse, *model.AppError) {
-	response, err := p.commandClient.Handle(args)
-	if err != nil {
-		return nil, model.NewAppError("ExecuteCommand", "plugin.command.execute_command.app_error", nil, err.Error(), http.StatusInternalServerError)
-	}
-	return response, nil
 }
 
 // See https://developers.mattermost.com/extend/plugins/server/reference/
