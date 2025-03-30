@@ -1,4 +1,4 @@
-package main
+package uffd
 
 import (
 	"context"
@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 )
 
-type UffdAPI struct {
+type API struct {
 	HTTPClient *http.Client
 
 	EndpointBase string
@@ -17,7 +19,7 @@ type UffdAPI struct {
 	Password     string
 }
 
-func (u *UffdAPI) endpoint(path string) string {
+func (u *API) endpoint(path string) string {
 	return strings.TrimRight(u.EndpointBase, "/") + path
 }
 
@@ -30,7 +32,7 @@ func ensureNoTrailingContent(r io.Reader) error {
 	return nil
 }
 
-func (u *UffdAPI) do(ctx context.Context, method string, path string, body io.Reader, decode any) error {
+func (u *API) do(ctx context.Context, method string, path string, body io.Reader, decode any) error {
 	req, err := http.NewRequestWithContext(ctx, method, u.endpoint(path), body)
 	if err != nil {
 		return fmt.Errorf("creating HTTP request: %w", err)
@@ -63,21 +65,21 @@ func (u *UffdAPI) do(ctx context.Context, method string, path string, body io.Re
 	return nil
 }
 
-type UffdGroup struct {
+type Group struct {
 	ID      int      `json:"id"`
 	Name    string   `json:"name"`
 	Members []string `json:"members"`
 }
 
-func (u *UffdAPI) GetGroups(ctx context.Context) ([]UffdGroup, error) {
-	var groups []UffdGroup
+func (u *API) GetGroups(ctx context.Context) ([]Group, error) {
+	var groups []Group
 	if err := u.do(ctx, "GET", "/api/v1/getgroups", nil, &groups); err != nil {
 		return nil, fmt.Errorf("getgroups: %w", err)
 	}
 	return groups, nil
 }
 
-type UffdUser struct {
+type User struct {
 	DisplayName string   `json:"displayname"`
 	Email       string   `json:"email"`
 	Groups      []string `json:"groups"`
@@ -85,10 +87,41 @@ type UffdUser struct {
 	LoginName   string   `json:"loginname"`
 }
 
-func (u *UffdAPI) GetUsers(ctx context.Context) ([]UffdUser, error) {
-	var users []UffdUser
+func (u *API) GetUsers(ctx context.Context) ([]User, error) {
+	var users []User
 	if err := u.do(ctx, "GET", "/api/v1/getusers", nil, &users); err != nil {
 		return nil, fmt.Errorf("getusers: %w", err)
 	}
 	return users, nil
+}
+
+type notFoundErr struct{}
+
+func (notFoundErr) Error() string { return "not found" }
+
+var ErrNotFound = notFoundErr{}
+
+type tooManyResultsErr struct{}
+
+func (tooManyResultsErr) Error() string { return "too many results" }
+
+var ErrTooManyResults = tooManyResultsErr{}
+
+func (u *API) getSingleUser(ctx context.Context, queryString url.Values) (*User, error) {
+	var users []User
+	if err := u.do(ctx, "GET", "/api/v1/getusers?"+queryString.Encode(), nil, &users); err != nil {
+		return nil, fmt.Errorf("getusers: %w", err)
+	}
+	switch {
+	case len(users) == 1:
+		return &users[0], nil
+	case len(users) > 1:
+		return nil, ErrTooManyResults
+	default:
+		return nil, ErrNotFound
+	}
+}
+
+func (u *API) GetUserByID(ctx context.Context, id int) (*User, error) {
+	return u.getSingleUser(ctx, url.Values{"id": []string{strconv.Itoa(id)}})
 }

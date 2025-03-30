@@ -45,6 +45,12 @@ type configuration struct {
 	// be removed.
 	SyncGroupRegex string
 
+	// EnabledGroup defines the name of a group that, if a user is present in it,
+	// causes the user to be enabled for Mattermost.
+	// This should usually match how the OIDC service is configured in uffd.
+	// If empty, Mattermost users will only be disabled if they are disabled in uffd (and not if they no longer have access to Mattermost).
+	EnabledGroup string
+
 	// SyncInterval is the interval at which groups will be synced. Note
 	// that syncing can also be triggered by hitting the "sync" endpoint.
 	SyncInterval configurationDuration

@@ -8,10 +8,14 @@ import (
 
 	"github.com/lukegb/mattermost-plugin-uffd/server/command"
 	"github.com/lukegb/mattermost-plugin-uffd/server/store/kvstore"
+	"github.com/lukegb/mattermost-plugin-uffd/server/syncengine"
+	"github.com/lukegb/mattermost-plugin-uffd/server/uffd"
+
 	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin"
 	"github.com/mattermost/mattermost/server/public/pluginapi"
 	"github.com/mattermost/mattermost/server/public/pluginapi/cluster"
+	log "github.com/sirupsen/logrus"
 )
 
 // Plugin implements the interface expected by the Mattermost server to communicate between the server and plugin processes.
@@ -28,7 +32,7 @@ type Plugin struct {
 	commandClient command.Command
 
 	// uffd is the Uffd API.
-	uffd *UffdAPI
+	uffd *uffd.API
 
 	syncJob   *cluster.Job
 	syncMutex *cluster.Mutex
@@ -71,12 +75,14 @@ func (p *Plugin) rescheduleSync() error {
 func (p *Plugin) OnActivate() error {
 	p.client = pluginapi.NewClient(p.API, p.Driver)
 
+	pluginapi.ConfigureLogrus(log.StandardLogger(), p.client)
+
 	p.kvstore = kvstore.NewKVStore(p.client)
 
 	p.commandClient = command.NewCommandHandler(p.client)
 
 	cfg := p.getConfiguration()
-	p.uffd = &UffdAPI{
+	p.uffd = &uffd.API{
 		HTTPClient:   http.DefaultClient,
 		EndpointBase: cfg.UffdAddress,
 		Username:     cfg.UffdApiUser,
@@ -103,7 +109,7 @@ func (p *Plugin) OnActivate() error {
 func (p *Plugin) OnDeactivate() error {
 	if p.syncJob != nil {
 		if err := p.syncJob.Close(); err != nil {
-			p.API.LogError("Failed to close sync job", "err", err)
+			log.WithFields(log.Fields{"err": err}).Error("Failed to close sync job")
 		}
 	}
 	return nil
@@ -111,12 +117,15 @@ func (p *Plugin) OnDeactivate() error {
 
 // UserWillLogIn triggers before the user logs in.
 func (p *Plugin) UserWillLogIn(c *plugin.Context, user *model.User) string {
-	if user.Props != nil && user.Props["uffd/username"] != user.Username {
-		user.Username = user.Props["uffd/username"]
+	if user.Props != nil && user.Props[syncengine.MMIdPUsernameProp] != user.Username {
+		user.Username = user.Props[syncengine.MMIdPUsernameProp]
 		var appErr *model.AppError
 		user, appErr = p.API.UpdateUser(user)
 		if appErr != nil {
-			p.API.LogError("Updating username on login failed", "user", user, "err", appErr)
+			log.WithFields(log.Fields{
+				"user": user,
+				"err":  appErr,
+			}).Error("Updating username on login failed")
 		}
 	}
 	return "" // empty string permits login

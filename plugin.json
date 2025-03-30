@@ -31,6 +31,14 @@
 			"default": ""
 		},
 		{
+			"key": "EnabledGroup",
+			"display_name": "Name of group that gates access to Mattermost in uffd",
+			"type": "text",
+			"help_text": "The name of the group which gates access to Mattermost in uffd. If set, then users who are no longer in this group will have their Mattermost account disabled. If left empty, then users will only have their Mattermost account disabled if their uffd account is disabled.",
+			"placeholder": "mattermost_access",
+			"default": ""
+		},
+		{
 			"key": "SyncInterval",
 			"display_name": "Sync interval",
 			"type": "text",

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 
@@ -37,7 +38,7 @@ func (p *Plugin) MattermostAuthorizationRequired(next http.Handler) http.Handler
 
 // e.g. http://localhost:8065/plugins/org.emfcamp.mattermost-plugin-uffd/login
 func (p *Plugin) HttpSyncThenLogin(w http.ResponseWriter, r *http.Request) {
-	if err := p.runSync("HTTP /login"); err != nil {
+	if err := p.runSync(context.WithoutCancel(r.Context()), "HTTP /login"); err != nil {
 		http.Redirect(w, r, "/error", http.StatusSeeOther)
 		return
 	}
@@ -48,7 +49,7 @@ func (p *Plugin) HttpSyncThenLogin(w http.ResponseWriter, r *http.Request) {
 func (p *Plugin) HttpSyncNow(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "text/plain; charset=utf-8")
 
-	if err := p.runSync("HTTP /sync"); err != nil {
+	if err := p.runSync(context.WithoutCancel(r.Context()), "HTTP /sync"); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, "%s\n", err)
 	} else {

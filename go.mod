@@ -6,6 +6,7 @@ toolchain go1.24.1
 
 require (
 	github.com/golang/mock v1.6.0
+	github.com/google/go-cmp v0.7.0
 	github.com/mattermost/mattermost/server/public v0.1.11-0.20250313192821-cb402b08c2cc
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.10.0
@@ -22,9 +23,6 @@ require (
 	github.com/russellhaering/goxmldsig v1.2.0 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
-	golang.org/x/mod v0.22.0 // indirect
-	golang.org/x/sync v0.12.0 // indirect
-	golang.org/x/tools v0.29.0 // indirect
 )
 
 require (
