@@ -9,7 +9,7 @@ import type {ActionResult} from 'mattermost-redux/types/actions';
 type Props = {
     groups: Group[];
     actions: {
-        getGroups: (opts?: GetGroupsParams) => Promise<ActionResult>;
+        getGroups: (opts: GetGroupsParams) => Promise<ActionResult<Group[], any>>;
     };
 }
 
