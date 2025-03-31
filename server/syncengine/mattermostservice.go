@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/lukegb/mattermost-plugin-uffd/server/ctxlog"
-	"github.com/lukegb/mattermost-plugin-uffd/server/paginator"
 	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin"
+
+	"github.com/lukegb/mattermost-plugin-uffd/server/ctxlog"
+	"github.com/lukegb/mattermost-plugin-uffd/server/paginator"
 )
 
 const (
@@ -49,12 +50,12 @@ type strError string
 
 func (s strError) Error() string { return string(s) }
 
-var ErrNotIdPUser strError = "not a user created from the IdP"
+var ErrNotIDPUser strError = "not a user created from the IdP"
 
 func mattermostUserToSyncUser(serviceUser *model.User) (*User[string], error) {
 	idpUserIDStr := serviceUser.Props[MMIdPUserIDProp]
 	if idpUserIDStr == "" {
-		return nil, fmt.Errorf("loading user %v: %w", serviceUser.Id, ErrNotIdPUser)
+		return nil, fmt.Errorf("loading user %v: %w", serviceUser.Id, ErrNotIDPUser)
 	}
 	idpUserID, err := strconv.Atoi(idpUserIDStr)
 	if err != nil {
@@ -68,7 +69,7 @@ func mattermostUserToSyncUser(serviceUser *model.User) (*User[string], error) {
 		Email:       serviceUser.Email,
 		Active:      serviceUser.DeleteAt == 0,
 
-		IdPUserID:     idpUserID,
+		IDPUserID:     idpUserID,
 		ServiceUserID: serviceUser.Id,
 		ServiceUser:   serviceUser,
 	}, nil
@@ -91,7 +92,7 @@ func (s *MattermostService) FetchUsers(ctx context.Context) ([]*User[string], er
 	out := make([]*User[string], 0, len(serviceUsers))
 	for _, serviceUser := range serviceUsers {
 		u, err := mattermostUserToSyncUser(serviceUser)
-		if errors.Is(err, ErrNotIdPUser) {
+		if errors.Is(err, ErrNotIDPUser) {
 			continue
 		} else if err != nil {
 			return nil, fmt.Errorf("fetching users from Mattermost: %w", err)
@@ -120,7 +121,7 @@ func mattermostGroupToSyncGroup(ctx context.Context, s *MattermostService, servi
 	return &Group[string]{
 		GroupID:       serviceGroup.Id,
 		Name:          serviceGroup.GetName(),
-		IdPID:         serviceGroup.GetRemoteId(),
+		IDPID:         serviceGroup.GetRemoteId(),
 		MemberUserIDs: groupMembers,
 
 		ServiceGroup: serviceGroup,
@@ -153,7 +154,7 @@ func (s *MattermostService) FetchGroups(ctx context.Context) ([]*Group[string], 
 		out = append(out, &Group[string]{
 			GroupID:       serviceGroup.Id,
 			Name:          serviceGroup.GetName(),
-			IdPID:         serviceGroup.GetRemoteId(),
+			IDPID:         serviceGroup.GetRemoteId(),
 			MemberUserIDs: groupMembers,
 			ServiceGroup:  serviceGroup,
 		})

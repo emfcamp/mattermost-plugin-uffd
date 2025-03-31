@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/mattermost/mattermost/server/public/model"
+
 	"github.com/lukegb/mattermost-plugin-uffd/server/paginator"
 	"github.com/lukegb/mattermost-plugin-uffd/server/stringset"
 	"github.com/lukegb/mattermost-plugin-uffd/server/syncengine"
-	"github.com/mattermost/mattermost/server/public/model"
 )
 
 type mattermostSystemRoleHandler struct {

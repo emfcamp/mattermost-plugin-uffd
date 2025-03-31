@@ -5,8 +5,9 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/lukegb/mattermost-plugin-uffd/server/syncengine"
 	"github.com/mattermost/mattermost/server/public/model"
+
+	"github.com/lukegb/mattermost-plugin-uffd/server/syncengine"
 )
 
 var dummySystemRoleST = SyncableTarget{Type: mattermostSyncableTypeSystemRole, ID: "system_admin"}

@@ -3,14 +3,15 @@ package main
 import (
 	"context"
 
+	log "github.com/sirupsen/logrus"
+
 	"github.com/lukegb/mattermost-plugin-uffd/server/ctxlog"
 	"github.com/lukegb/mattermost-plugin-uffd/server/syncablesync"
 	"github.com/lukegb/mattermost-plugin-uffd/server/syncengine"
-	log "github.com/sirupsen/logrus"
 )
 
 func (p *Plugin) runSyncJob() {
-	p.runSync(context.Background(), "schedule")
+	_ = p.runSync(context.Background(), "schedule")
 }
 
 func (p *Plugin) runSync(ctx context.Context, trigger string) error {
@@ -27,13 +28,13 @@ func (p *Plugin) runSync(ctx context.Context, trigger string) error {
 
 	l.Info("Performing UFFD group sync")
 	se := &syncengine.SyncEngine{
-		IdP: &syncengine.UffdIdP{
+		IDP: &syncengine.UffdIDP{
 			API:              p.uffd,
 			EnabledGroup:     cfg.EnabledGroup,
 			GroupFilterRegex: cfg.SyncGroupRegex,
 		},
 		Service: &syncengine.MattermostService{
-			API: p.MattermostPlugin.API,
+			API: p.API,
 		},
 	}
 	out, err := se.FullSync(ctx)
@@ -46,7 +47,7 @@ func (p *Plugin) runSync(ctx context.Context, trigger string) error {
 	l.Info("Performing syncables sync")
 	ss := &syncablesync.Engine{
 		API: &syncablesync.Mattermost{
-			API:                p.MattermostPlugin.API,
+			API:                p.API,
 			SystemAdminGroup:   cfg.SystemAdminGroup,
 			SystemManagerGroup: cfg.SystemManagerGroup,
 		},

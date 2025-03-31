@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+
 	"github.com/lukegb/mattermost-plugin-uffd/server/uffd"
 )
 
@@ -35,7 +36,7 @@ func (u *FakeUffd) GetGroups(context.Context) ([]uffd.Group, error) {
 func TestUffdFetchUsers_NoEnabledGroup(t *testing.T) {
 	t.Parallel()
 
-	p := &UffdIdP{
+	p := &UffdIDP{
 		API: &FakeUffd{
 			Users: []uffd.User{{
 				ID:          1000,
@@ -79,7 +80,7 @@ func TestUffdFetchUsers_NoEnabledGroup(t *testing.T) {
 func TestUffdFetchUsers_EnabledGroupSet(t *testing.T) {
 	t.Parallel()
 
-	p := &UffdIdP{
+	p := &UffdIDP{
 		API: &FakeUffd{
 			Users: []uffd.User{{
 				ID:          1000,
@@ -123,7 +124,7 @@ func TestUffdFetchUsers_EnabledGroupSet(t *testing.T) {
 func TestUffdFetchUserByID(t *testing.T) {
 	t.Parallel()
 
-	p := &UffdIdP{
+	p := &UffdIDP{
 		API: &FakeUffd{
 			Users: []uffd.User{{
 				ID:          1000,
@@ -154,7 +155,7 @@ func TestUffdFetchUserByID(t *testing.T) {
 func TestUffdFetchGroups(t *testing.T) {
 	t.Parallel()
 
-	p := &UffdIdP{
+	p := &UffdIDP{
 		API: &FakeUffd{
 			Users: []uffd.User{{
 				ID:          1000,
@@ -195,7 +196,7 @@ func TestUffdFetchGroups(t *testing.T) {
 func TestUffdFetchGroups_Cache(t *testing.T) {
 	t.Parallel()
 
-	p := &UffdIdP{
+	p := &UffdIDP{
 		API: &FakeUffd{
 			Groups: []uffd.Group{{
 				ID:      2000,
@@ -227,7 +228,7 @@ func TestUffdFetchGroups_Cache(t *testing.T) {
 func TestUffdFetchGroups_FilterRegex(t *testing.T) {
 	t.Parallel()
 
-	p := &UffdIdP{
+	p := &UffdIDP{
 		API: &FakeUffd{
 			Users: []uffd.User{{
 				ID:          1000,

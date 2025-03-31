@@ -17,7 +17,7 @@ type UffdAPI interface {
 
 var _ UffdAPI = (*uffd.API)(nil)
 
-type UffdIdP struct {
+type UffdIDP struct {
 	API UffdAPI
 
 	// EnabledGroup, if non-empty, is a group name which dictates whether the service should see the account as enabled.
@@ -30,9 +30,9 @@ type UffdIdP struct {
 	usernameToUser map[string]*User[int]
 }
 
-var _ IdPAPI = (*UffdIdP)(nil)
+var _ IDPAPI = (*UffdIDP)(nil)
 
-func (idp *UffdIdP) uffdUserToSyncUser(u uffd.User) (*User[int], error) {
+func (idp *UffdIDP) uffdUserToSyncUser(u uffd.User) (*User[int], error) {
 	active := len(u.Groups) > 0
 	if idp.EnabledGroup != "" {
 		active = stringset.FromSlice(u.Groups).Contains(idp.EnabledGroup)
@@ -47,12 +47,12 @@ func (idp *UffdIdP) uffdUserToSyncUser(u uffd.User) (*User[int], error) {
 	}, nil
 }
 
-func (idp *UffdIdP) FetchUsers(ctx context.Context) ([]*User[int], error) {
+func (idp *UffdIDP) FetchUsers(ctx context.Context) ([]*User[int], error) {
 	idpUsers, err := idp.API.GetUsers(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("fetching users from uffd: %w", err)
 	}
-	idp.populateUserCache(idpUsers)
+	_, _ = idp.populateUserCache(idpUsers)
 
 	out := make([]*User[int], len(idpUsers))
 	for n, idpUser := range idpUsers {
@@ -64,7 +64,7 @@ func (idp *UffdIdP) FetchUsers(ctx context.Context) ([]*User[int], error) {
 	return out, nil
 }
 
-func (idp *UffdIdP) FetchUserByID(ctx context.Context, userID int) (*User[int], error) {
+func (idp *UffdIDP) FetchUserByID(ctx context.Context, userID int) (*User[int], error) {
 	idpUser, err := idp.API.GetUserByID(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("fetching user from uffd: %w", err)
@@ -73,7 +73,7 @@ func (idp *UffdIdP) FetchUserByID(ctx context.Context, userID int) (*User[int], 
 	return idp.uffdUserToSyncUser(*idpUser)
 }
 
-func (idp *UffdIdP) populateUserCache(idpUsers []uffd.User) (map[string]*User[int], error) {
+func (idp *UffdIDP) populateUserCache(idpUsers []uffd.User) (map[string]*User[int], error) {
 	un2U := make(map[string]*User[int], len(idpUsers))
 	for _, u := range idpUsers {
 		var err error
@@ -86,7 +86,7 @@ func (idp *UffdIdP) populateUserCache(idpUsers []uffd.User) (map[string]*User[in
 	return un2U, nil
 }
 
-func (idp *UffdIdP) loadUserCache(ctx context.Context) (map[string]*User[int], error) {
+func (idp *UffdIDP) loadUserCache(ctx context.Context) (map[string]*User[int], error) {
 	if idp.usernameToUser != nil {
 		return idp.usernameToUser, nil
 	}
@@ -98,7 +98,7 @@ func (idp *UffdIdP) loadUserCache(ctx context.Context) (map[string]*User[int], e
 	return idp.populateUserCache(idpUsers)
 }
 
-func (idp *UffdIdP) uffdGroupToSyncGroup(ctx context.Context, g uffd.Group) (*Group[int], error) {
+func (idp *UffdIDP) uffdGroupToSyncGroup(ctx context.Context, g uffd.Group) (*Group[int], error) {
 	usernameToUser, err := idp.loadUserCache(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("fetching username<->UID cache: %w", err)
@@ -124,7 +124,7 @@ func (idp *UffdIdP) uffdGroupToSyncGroup(ctx context.Context, g uffd.Group) (*Gr
 	}, nil
 }
 
-func (idp *UffdIdP) FetchGroups(ctx context.Context) ([]*Group[int], error) {
+func (idp *UffdIDP) FetchGroups(ctx context.Context) ([]*Group[int], error) {
 	idpGroups, err := idp.API.GetGroups(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("fetching groups from uffd: %w", err)

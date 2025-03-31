@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+
 	"github.com/lukegb/mattermost-plugin-uffd/server/stringset"
 )
 
@@ -41,7 +42,7 @@ func (t *TestService) CreateUsers(ctx context.Context, newUsers []*User[int]) ([
 			Email:       u.Email,
 			Active:      u.Active,
 
-			IdPUserID: u.UserID,
+			IDPUserID: u.UserID,
 		}
 		newUser.ServiceUserID = newUser.UserID
 		t.Users[newUser.UserID] = newUser
@@ -161,13 +162,13 @@ func (t *TestService) UpdateUsers(ctx context.Context, inUsers []*User[string]) 
 
 var _ ServiceAPI = (*TestService)(nil)
 
-type TestIdP struct {
+type TestIDP struct {
 	Users  []*User[int]
 	Groups []*Group[int]
 }
 
 // FetchGroups implements IdPAPI.
-func (t *TestIdP) FetchGroups(context.Context) ([]*Group[int], error) {
+func (t *TestIDP) FetchGroups(context.Context) ([]*Group[int], error) {
 	var out []*Group[int]
 	for _, g := range t.Groups {
 		out = append(out, g.ShallowClone())
@@ -176,7 +177,7 @@ func (t *TestIdP) FetchGroups(context.Context) ([]*Group[int], error) {
 }
 
 // FetchUserByID implements IdPAPI.
-func (t *TestIdP) FetchUserByID(ctx context.Context, uid int) (*User[int], error) {
+func (t *TestIDP) FetchUserByID(ctx context.Context, uid int) (*User[int], error) {
 	for _, u := range t.Users {
 		if u.UserID == uid {
 			return u.ShallowClone(), nil
@@ -186,7 +187,7 @@ func (t *TestIdP) FetchUserByID(ctx context.Context, uid int) (*User[int], error
 }
 
 // FetchUsers implements IdPAPI.
-func (t *TestIdP) FetchUsers(context.Context) ([]*User[int], error) {
+func (t *TestIDP) FetchUsers(context.Context) ([]*User[int], error) {
 	var out []*User[int]
 	for _, u := range t.Users {
 		out = append(out, u.ShallowClone())
@@ -194,7 +195,7 @@ func (t *TestIdP) FetchUsers(context.Context) ([]*User[int], error) {
 	return out, nil
 }
 
-var _ IdPAPI = (*TestIdP)(nil)
+var _ IDPAPI = (*TestIDP)(nil)
 
 type clonable[T any] interface {
 	ShallowClone() T
@@ -207,7 +208,7 @@ func mutate[T clonable[T]](x T, f func(T)) T {
 }
 
 func benchmarkFullSync(b *testing.B, users, groups int) {
-	idp := &TestIdP{
+	idp := &TestIDP{
 		Users:  make([]*User[int], users),
 		Groups: make([]*Group[int], groups),
 	}
@@ -238,7 +239,7 @@ func benchmarkFullSync(b *testing.B, users, groups int) {
 			Groups: make(map[string]*Group[string]),
 		}
 		syncEngine := &SyncEngine{
-			IdP:     idp,
+			IDP:     idp,
 			Service: s,
 		}
 		if _, err := syncEngine.FullSync(ctx); err != nil {
@@ -270,7 +271,7 @@ func TestFullSync(t *testing.T) {
 		Email:         "lukegb@example.com",
 		DisplayName:   "Luke GB",
 		Active:        true,
-		IdPUserID:     1000,
+		IDPUserID:     1000,
 		ServiceUserID: "user:::lukegb",
 	}
 
@@ -285,7 +286,7 @@ func TestFullSync(t *testing.T) {
 
 	tcs := []struct {
 		name    string
-		idp     *TestIdP
+		idp     *TestIDP
 		service *TestService
 
 		wantUsers   map[string]*User[string]
@@ -293,7 +294,7 @@ func TestFullSync(t *testing.T) {
 		wantOutcome *Outcome
 	}{{
 		name: "create user",
-		idp: &TestIdP{
+		idp: &TestIDP{
 			Users: []*User[int]{idpLukegb.ShallowClone()},
 		},
 		service: emptyService(),
@@ -309,7 +310,7 @@ func TestFullSync(t *testing.T) {
 		},
 	}, {
 		name: "create group",
-		idp: &TestIdP{
+		idp: &TestIDP{
 			Groups: []*Group[int]{idpFoo.ShallowClone()},
 		},
 		service: emptyService(),
@@ -323,7 +324,7 @@ func TestFullSync(t *testing.T) {
 		},
 	}, {
 		name: "create user + group",
-		idp: &TestIdP{
+		idp: &TestIDP{
 			Users: []*User[int]{idpLukegb.ShallowClone()},
 			Groups: []*Group[int]{mutate(idpFoo, func(g *Group[int]) {
 				g.MemberUserIDs = []int{1000}
@@ -356,7 +357,7 @@ func TestFullSync(t *testing.T) {
 		},
 	}, {
 		name: "do nothing with existing user + group",
-		idp: &TestIdP{
+		idp: &TestIDP{
 			Users: []*User[int]{idpLukegb.ShallowClone()},
 			Groups: []*Group[int]{mutate(idpFoo, func(g *Group[int]) {
 				g.MemberUserIDs = []int{1000}
@@ -383,7 +384,7 @@ func TestFullSync(t *testing.T) {
 		wantOutcome: &Outcome{},
 	}, {
 		name: "add existing user to existing group",
-		idp: &TestIdP{
+		idp: &TestIDP{
 			Users: []*User[int]{idpLukegb.ShallowClone()},
 			Groups: []*Group[int]{mutate(idpFoo, func(g *Group[int]) {
 				g.MemberUserIDs = []int{1000}
@@ -418,7 +419,7 @@ func TestFullSync(t *testing.T) {
 		},
 	}, {
 		name: "remove user from group",
-		idp: &TestIdP{
+		idp: &TestIDP{
 			Users:  []*User[int]{idpLukegb.ShallowClone()},
 			Groups: []*Group[int]{idpFoo.ShallowClone()},
 		},
@@ -449,7 +450,7 @@ func TestFullSync(t *testing.T) {
 		},
 	}, {
 		name: "disable user that disappears from IdP",
-		idp: &TestIdP{
+		idp: &TestIDP{
 			Users:  []*User[int]{},
 			Groups: []*Group[int]{idpFoo.ShallowClone()},
 		},
@@ -480,7 +481,7 @@ func TestFullSync(t *testing.T) {
 		},
 	}, {
 		name: "delete group that disappears from IdP",
-		idp: &TestIdP{
+		idp: &TestIDP{
 			Users: []*User[int]{idpLukegb.ShallowClone()},
 		},
 		service: &TestService{
@@ -506,7 +507,7 @@ func TestFullSync(t *testing.T) {
 			t.Parallel()
 
 			syncEngine := &SyncEngine{
-				IdP:     tc.idp,
+				IDP:     tc.idp,
 				Service: tc.service,
 			}
 			ctx, cancel := context.WithCancel(context.Background())

@@ -12,7 +12,7 @@ type User[I comparable] struct {
 	Active      bool
 
 	// These fields are only populated on responses from the service, not the IdP.
-	IdPUserID     int
+	IDPUserID     int
 	ServiceUserID string
 	ServiceUser   any
 }
@@ -24,7 +24,7 @@ func (u User[I]) ShallowClone() *User[I] {
 type Group[I comparable] struct {
 	GroupID       any
 	Name          string
-	IdPID         string
+	IDPID         string
 	MemberUserIDs []I
 
 	ServiceGroup any
@@ -34,7 +34,7 @@ func (g Group[I]) ShallowClone() *Group[I] {
 	return &g
 }
 
-type IdPAPI interface {
+type IDPAPI interface {
 	FetchUsers(context.Context) ([]*User[int], error)
 	FetchGroups(context.Context) ([]*Group[int], error)
 

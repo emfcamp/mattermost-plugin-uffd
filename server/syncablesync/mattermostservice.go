@@ -6,10 +6,11 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/lukegb/mattermost-plugin-uffd/server/paginator"
-	"github.com/lukegb/mattermost-plugin-uffd/server/syncengine"
 	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin"
+
+	"github.com/lukegb/mattermost-plugin-uffd/server/paginator"
+	"github.com/lukegb/mattermost-plugin-uffd/server/syncengine"
 )
 
 const (

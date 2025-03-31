@@ -65,11 +65,11 @@ type configuration struct {
 	// which the API endpoints will be derived.
 	UffdAddress string
 
-	// UffdApiUser is the username used for authenticating with the UFFD API.
-	UffdApiUser string
+	// UffdAPIUser is the username used for authenticating with the UFFD API.
+	UffdAPIUser string
 
-	// UffdApiPassword is the password used for authenticating with the UFFD API.
-	UffdApiPassword string
+	// UffdAPIPassword is the password used for authenticating with the UFFD API.
+	UffdAPIPassword string
 }
 
 // Clone shallow copies the configuration. Your implementation may require a deep copy if
@@ -125,13 +125,15 @@ func (p *Plugin) OnConfigurationChange() error {
 	var configuration = new(configuration)
 
 	// Load the public configuration fields from the Mattermost server configuration.
-	if err := p.MattermostPlugin.API.LoadPluginConfiguration(configuration); err != nil {
+	if err := p.API.LoadPluginConfiguration(configuration); err != nil {
 		return errors.Wrap(err, "failed to load plugin configuration")
 	}
 
 	p.setConfiguration(configuration)
 
-	p.rescheduleSync()
+	if err := p.rescheduleSync(); err != nil {
+		return errors.Wrap(err, "setting up sync scheduled job")
+	}
 
 	return nil
 }

@@ -12,7 +12,7 @@ import (
 )
 
 type SyncEngine struct {
-	IdP     IdPAPI
+	IDP     IDPAPI
 	Service ServiceAPI
 }
 
@@ -34,37 +34,37 @@ type Outcome struct {
 }
 
 type Cache struct {
-	serviceUsersByIdPID map[int]*User[string]
+	serviceUsersByIDPID map[int]*User[string]
 }
 
-func (c *Cache) getServiceUsersByIdPID(ctx context.Context, s *SyncEngine) (map[int]*User[string], error) {
-	if c.serviceUsersByIdPID != nil {
-		return c.serviceUsersByIdPID, nil
+func (c *Cache) getServiceUsersByIDPID(ctx context.Context, s *SyncEngine) (map[int]*User[string], error) {
+	if c.serviceUsersByIDPID != nil {
+		return c.serviceUsersByIDPID, nil
 	}
 
 	serviceUsers, err := s.Service.FetchUsers(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("fetching users from service: %w", err)
 	}
-	serviceUsersByIdPID := map[int]*User[string]{}
+	serviceUsersByIDPID := map[int]*User[string]{}
 	for _, serviceUser := range serviceUsers {
-		serviceUsersByIdPID[serviceUser.IdPUserID] = serviceUser
+		serviceUsersByIDPID[serviceUser.IDPUserID] = serviceUser
 	}
-	c.serviceUsersByIdPID = serviceUsersByIdPID
-	return serviceUsersByIdPID, nil
+	c.serviceUsersByIDPID = serviceUsersByIDPID
+	return serviceUsersByIDPID, nil
 }
 
 func (s *SyncEngine) FullSyncUsers(ctx context.Context, c *Cache, out *Outcome) error {
-	idpUsers, err := s.IdP.FetchUsers(ctx)
+	idpUsers, err := s.IDP.FetchUsers(ctx)
 	if err != nil {
 		return fmt.Errorf("fetching users from IdP: %w", err)
 	}
 
-	idpUsersByIdPID := map[int]*User[int]{}
+	idpUsersByIDPID := map[int]*User[int]{}
 	for _, idpUser := range idpUsers {
-		idpUsersByIdPID[idpUser.UserID] = idpUser
+		idpUsersByIDPID[idpUser.UserID] = idpUser
 	}
-	serviceUsersByIdPID, err := c.getServiceUsersByIdPID(ctx, s)
+	serviceUsersByIDPID, err := c.getServiceUsersByIDPID(ctx, s)
 	if err != nil {
 		return fmt.Errorf("fetching users from service: %w", err)
 	}
@@ -72,7 +72,7 @@ func (s *SyncEngine) FullSyncUsers(ctx context.Context, c *Cache, out *Outcome) 
 	var usersToCreate []*User[int]
 	var usersToUpdate []*User[string]
 	for _, idpUser := range idpUsers {
-		serviceUser, ok := serviceUsersByIdPID[idpUser.UserID]
+		serviceUser, ok := serviceUsersByIDPID[idpUser.UserID]
 		if !ok {
 			// Doesn't exist in service yet.
 			usersToCreate = append(usersToCreate, idpUser)
@@ -84,8 +84,8 @@ func (s *SyncEngine) FullSyncUsers(ctx context.Context, c *Cache, out *Outcome) 
 			usersToUpdate = append(usersToUpdate, serviceUser)
 		}
 	}
-	for _, serviceUser := range serviceUsersByIdPID {
-		if _, ok := idpUsersByIdPID[serviceUser.IdPUserID]; !ok {
+	for _, serviceUser := range serviceUsersByIDPID {
+		if _, ok := idpUsersByIDPID[serviceUser.IDPUserID]; !ok {
 			// Not known to the IdP.
 			if serviceUser.Active {
 				serviceUser.Active = false
@@ -102,7 +102,7 @@ func (s *SyncEngine) FullSyncUsers(ctx context.Context, c *Cache, out *Outcome) 
 		}
 		out.CreatedUsers = append(out.CreatedUsers, createdUsers...)
 		for _, u := range createdUsers {
-			serviceUsersByIdPID[u.IdPUserID] = u
+			serviceUsersByIDPID[u.IDPUserID] = u
 		}
 	}
 	if len(usersToUpdate) > 0 {
@@ -120,7 +120,7 @@ func (s *SyncEngine) FullSyncUsers(ctx context.Context, c *Cache, out *Outcome) 
 }
 
 func (s *SyncEngine) FullSyncGroups(ctx context.Context, c *Cache, out *Outcome) error {
-	idpGroups, err := s.IdP.FetchGroups(ctx)
+	idpGroups, err := s.IDP.FetchGroups(ctx)
 	if err != nil {
 		return fmt.Errorf("fetching groups from IdP: %w", err)
 	}
@@ -138,7 +138,7 @@ func (s *SyncEngine) FullSyncGroups(ctx context.Context, c *Cache, out *Outcome)
 	for _, serviceGroup := range serviceGroups {
 		serviceGroupsByName[serviceGroup.Name] = serviceGroup
 	}
-	serviceUsersByIdPID, err := c.getServiceUsersByIdPID(ctx, s)
+	serviceUsersByIDPID, err := c.getServiceUsersByIDPID(ctx, s)
 	if err != nil {
 		return fmt.Errorf("fetching user<->ID mapping: %w", err)
 	}
@@ -174,7 +174,7 @@ func (s *SyncEngine) FullSyncGroups(ctx context.Context, c *Cache, out *Outcome)
 				originalGroup := groupsToCreate[n]
 				members := make([]string, 0, len(originalGroup.MemberUserIDs))
 				for _, idpID := range originalGroup.MemberUserIDs {
-					serviceUser, ok := serviceUsersByIdPID[idpID]
+					serviceUser, ok := serviceUsersByIDPID[idpID]
 					if ok {
 						members = append(members, serviceUser.UserID)
 					}
@@ -208,7 +208,7 @@ func (s *SyncEngine) FullSyncGroups(ctx context.Context, c *Cache, out *Outcome)
 			idpGroup := idpGroupsByName[serviceGroup.Name]
 			wantMembers := stringset.New()
 			for _, idpMember := range idpGroup.MemberUserIDs {
-				serviceUser, ok := serviceUsersByIdPID[idpMember]
+				serviceUser, ok := serviceUsersByIDPID[idpMember]
 				if ok {
 					wantMembers.Add(serviceUser.UserID)
 				}

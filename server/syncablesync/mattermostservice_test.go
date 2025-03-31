@@ -5,8 +5,9 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/lukegb/mattermost-plugin-uffd/server/stringset"
 	"github.com/mattermost/mattermost/server/public/model"
+
+	"github.com/lukegb/mattermost-plugin-uffd/server/stringset"
 )
 
 type fakeMattermost struct {

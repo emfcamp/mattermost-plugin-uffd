@@ -236,7 +236,7 @@ func TestMattermostFetchUsers(t *testing.T) {
 		DisplayName:   "Test User",
 		Email:         "testuser@example.com",
 		Active:        true,
-		IdPUserID:     1000,
+		IDPUserID:     1000,
 		ServiceUserID: "id::user::testuser",
 		ServiceUser:   p.Users[0],
 	}, {
@@ -245,7 +245,7 @@ func TestMattermostFetchUsers(t *testing.T) {
 		DisplayName:   "Disabled User",
 		Email:         "disableduser@example.com",
 		Active:        false,
-		IdPUserID:     1001,
+		IDPUserID:     1001,
 		ServiceUserID: "id::user::disableduser",
 		ServiceUser:   p.Users[1],
 	}}
@@ -298,13 +298,13 @@ func TestMattermostFetchGroups(t *testing.T) {
 	want := []*Group[string]{{
 		GroupID:       "id::group::testgroup",
 		Name:          "testgroup",
-		IdPID:         "remote-testgroup",
+		IDPID:         "remote-testgroup",
 		MemberUserIDs: []string{"id::user::testuser"},
 		ServiceGroup:  p.Groups[0],
 	}, {
 		GroupID:      "id::group::emptygroup",
 		Name:         "emptygroup",
-		IdPID:        "remote-emptygroup",
+		IDPID:        "remote-emptygroup",
 		ServiceGroup: p.Groups[1],
 	}}
 
@@ -345,7 +345,7 @@ func TestMattermostCreateUsers(t *testing.T) {
 		Email:       "testuser@example.com",
 		Active:      true,
 
-		IdPUserID:     1000,
+		IDPUserID:     1000,
 		ServiceUserID: "id::user::testuser",
 		ServiceUser: &model.User{
 			Id:            "id::user::testuser",
@@ -368,7 +368,7 @@ func TestMattermostCreateUsers(t *testing.T) {
 		Email:       "disableduser@example.com",
 		Active:      false,
 
-		IdPUserID:     1001,
+		IDPUserID:     1001,
 		ServiceUserID: "id::user::disableduser",
 		ServiceUser: &model.User{
 			Id:            "id::user::disableduser",
@@ -410,7 +410,7 @@ func TestMattermostCreateGroups(t *testing.T) {
 	want := []*Group[string]{{
 		GroupID: "id::group::testgroup",
 		Name:    "testgroup",
-		IdPID:   "1000",
+		IDPID:   "1000",
 		ServiceGroup: &model.Group{
 			Id:          "id::group::testgroup",
 			Name:        ptr("testgroup"),
@@ -422,7 +422,7 @@ func TestMattermostCreateGroups(t *testing.T) {
 	}, {
 		GroupID: "id::group::testgroup2",
 		Name:    "testgroup2",
-		IdPID:   "5000",
+		IDPID:   "5000",
 		ServiceGroup: &model.Group{
 			Id:          "id::group::testgroup2",
 			Name:        ptr("testgroup2"),
@@ -528,7 +528,7 @@ func TestMattermostUpdateUsers(t *testing.T) {
 		Email:       "newemail@example.bin",
 		Active:      false,
 
-		IdPUserID:     1000,
+		IDPUserID:     1000,
 		ServiceUserID: "id::user::testuser",
 		ServiceUser: &model.User{
 			Id:            "id::user::testuser",
@@ -551,7 +551,7 @@ func TestMattermostUpdateUsers(t *testing.T) {
 		Email:       "newemail2@example.bin",
 		Active:      true,
 
-		IdPUserID:     1001,
+		IDPUserID:     1001,
 		ServiceUserID: "id::user::testuser2",
 		ServiceUser: &model.User{
 			Id:            "id::user::testuser2",
@@ -573,7 +573,7 @@ func TestMattermostUpdateUsers(t *testing.T) {
 		Email:       "disableduser@example.bin",
 		Active:      true,
 
-		IdPUserID:     1002,
+		IDPUserID:     1002,
 		ServiceUserID: "id::user::disableduser",
 		ServiceUser: &model.User{
 			Id:            "id::user::disableduser",
@@ -595,7 +595,7 @@ func TestMattermostUpdateUsers(t *testing.T) {
 		Email:       "untoucheduser@example.bin",
 		Active:      true,
 
-		IdPUserID:     1003,
+		IDPUserID:     1003,
 		ServiceUserID: "id::user::untoucheduser",
 		ServiceUser: &model.User{
 			Id:            "id::user::untoucheduser",
@@ -646,11 +646,11 @@ func TestMattermostDeleteGroups(t *testing.T) {
 	err := m.DeleteGroups(context.Background(), []*Group[string]{{
 		GroupID: "id::group::testgroup",
 		Name:    "testgroup",
-		IdPID:   "remote-testgroup",
+		IDPID:   "remote-testgroup",
 	}, {
 		GroupID: "id::group::emptygroup",
 		Name:    "emptygroup",
-		IdPID:   "remote-emptygroup",
+		IDPID:   "remote-emptygroup",
 	}})
 	if err != nil {
 		t.Fatalf("DeleteGroups: %v", err)
