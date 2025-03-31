@@ -36,6 +36,8 @@ const config = {
     resolve: {
         alias: {
             '@': path.resolve(__dirname, 'src'),
+            '@webapp': path.resolve(__dirname, 'node_modules/mattermost-webapp/src'),
+            'mattermost-redux': path.resolve(__dirname, 'node_modules/mattermost-webapp/src/packages/mattermost-redux/src'),
         },
         modules: [
             'src',
@@ -46,6 +48,17 @@ const config = {
     },
     module: {
         rules: [
+            {
+                test: /(mattermost-webapp).*\.(js|jsx|ts|tsx)$/,
+                use: {
+                    loader: 'babel-loader',
+                    options: {
+                        cacheDirectory: true,
+
+                        // Babel configuration is in babel.config.js because jest requires it to be there.
+                    },
+                },
+            },
             {
                 test: /\.(js|jsx|ts|tsx)$/,
                 exclude: /node_modules/,
@@ -69,11 +82,25 @@ const config = {
                         loader: 'sass-loader',
                         options: {
                             sassOptions: {
-                                includePaths: ['node_modules/compass-mixins/lib', 'sass'],
+                                includePaths: ['node_modules/compass-mixins/lib', 'sass', 'node_modules/mattermost-webapp/src/sass'],
                             },
                         },
                     },
                 ],
+            },
+            {
+                test: /\.(png|eot|tiff|svg|woff2|woff|ttf|gif|mp3|jpg)$/,
+                type: 'asset/resource',
+                use: [
+                    {
+                        loader: 'image-webpack-loader',
+                        options: {},
+                    },
+                ],
+            },
+            {
+                test: /\.apng$/,
+                type: 'asset/resource',
             },
         ],
     },
