@@ -33,7 +33,7 @@ func (p *Plugin) runSync(ctx context.Context, trigger string) error {
 			GroupFilterRegex: cfg.SyncGroupRegex,
 		},
 		Service: &syncengine.MattermostService{
-			API: p.API,
+			API: p.MattermostPlugin.API,
 		},
 	}
 	out, err := se.FullSync(ctx)
@@ -46,7 +46,7 @@ func (p *Plugin) runSync(ctx context.Context, trigger string) error {
 	l.Info("Performing syncables sync")
 	ss := &syncablesync.Engine{
 		API: &syncablesync.Mattermost{
-			API:                p.API,
+			API:                p.MattermostPlugin.API,
 			SystemAdminGroup:   cfg.SystemAdminGroup,
 			SystemManagerGroup: cfg.SystemManagerGroup,
 		},
