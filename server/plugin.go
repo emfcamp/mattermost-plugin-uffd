@@ -44,12 +44,12 @@ func (p *Plugin) rescheduleSync() error {
 
 	if p.syncJob != nil {
 		if err := p.syncJob.Close(); err != nil {
-			p.API.LogError("Failed to close sync job", "err", err)
+			p.MattermostPlugin.API.LogError("Failed to close sync job", "err", err)
 		}
 	}
 
 	job, err := cluster.Schedule(
-		p.API,
+		p.MattermostPlugin.API,
 		"SyncJob",
 		cluster.MakeWaitForRoundedInterval(time.Duration(p.getConfiguration().SyncInterval)),
 		p.runSyncJob,
@@ -65,7 +65,7 @@ func (p *Plugin) rescheduleSync() error {
 
 // OnActivate is invoked when the plugin is activated. If an error is returned, the plugin will be deactivated.
 func (p *Plugin) OnActivate() error {
-	p.client = pluginapi.NewClient(p.API, p.Driver)
+	p.client = pluginapi.NewClient(p.MattermostPlugin.API, p.MattermostPlugin.Driver)
 
 	pluginapi.ConfigureLogrus(log.StandardLogger(), p.client)
 
@@ -82,7 +82,7 @@ func (p *Plugin) OnActivate() error {
 	}
 
 	syncMutex, err := cluster.NewMutex(
-		p.API,
+		p.MattermostPlugin.API,
 		"SyncMutex",
 	)
 	if err != nil {
@@ -108,7 +108,7 @@ func (p *Plugin) UserWillLogIn(c *plugin.Context, user *model.User) string {
 	if user.Props != nil && user.Props[syncengine.MMIdPUsernameProp] != user.Username {
 		user.Username = user.Props[syncengine.MMIdPUsernameProp]
 		var appErr *model.AppError
-		user, appErr = p.API.UpdateUser(user)
+		user, appErr = p.MattermostPlugin.API.UpdateUser(user)
 		if appErr != nil {
 			log.WithFields(log.Fields{
 				"user": user,
