@@ -1,14 +1,11 @@
-// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
-// See LICENSE.txt for license information.
-
 import type {Store, Action} from 'redux';
 
 import type {GlobalState} from '@mattermost/types/store';
 
+import UffdGroupTable from './components/uffd_group_table';
+
 import manifest from '@/manifest';
 import type {PluginRegistry} from '@/types/mattermost-webapp';
-
-import UffdGroupTable from './components/uffd_group_table';
 
 export default class Plugin {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function

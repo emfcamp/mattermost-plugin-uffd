@@ -3,6 +3,7 @@ import React from 'react';
 import './uffd.scss';
 
 import type {GetGroupsParams, Group} from '@mattermost/types/groups';
+
 import type {ActionResult} from 'mattermost-redux/types/actions';
 
 type Props = {
@@ -18,7 +19,6 @@ type State = {
 }
 
 export default class UffdGroupTable extends React.PureComponent<Props, State> {
-
     constructor(props: Props) {
         super(props);
         this.state = {
@@ -48,17 +48,19 @@ export default class UffdGroupTable extends React.PureComponent<Props, State> {
             <div className={'AdminPanel clearfix'}>
                 <div className='header'>
                     <div>
-                        <h3>uffd Groups</h3>
+                        <h3>{'uffd Groups'}</h3>
                         <div className='mt-2'>
-                            Groups synchronized from uffd are listed below. Configure them <a href="/admin_console/plugins/plugin_org.emfcamp.mattermost-plugin-uffd">in the uffd plugin settings</a>, and link them to teams and channels in the Teams and Channels settings in the left-hand sidebar.
+                            {'Groups synchronized from uffd are listed below. Configure them '}
+                            <a href='/admin_console/plugins/plugin_org.emfcamp.mattermost-plugin-uffd'>{'in the uffd plugin settings'}</a>
+                            {', and link them to teams and channels in the Teams and Channels settings in the left-hand sidebar.'}
                         </div>
                     </div>
                 </div>
                 <div className='groups-list'>
                     <div className='groups-list--header'>
-                        <div className='group-name'>Name</div>
+                        <div className='group-name'>{'Name'}</div>
                         <div className='group-content'>
-                            <div className='group-description' />
+                            <div className='group-description'/>
                         </div>
                     </div>
                     <div
@@ -69,7 +71,7 @@ export default class UffdGroupTable extends React.PureComponent<Props, State> {
                     </div>
                 </div>
             </div>
-        )
+        );
     }
 
     renderList(): JSX.Element | JSX.Element[] {
@@ -83,14 +85,14 @@ export default class UffdGroupTable extends React.PureComponent<Props, State> {
         if (this.state.fetchError) {
             return (
                 <div className='groups-list-empty'>
-                    Failed to retrieve uffd groups.
+                    {'Failed to retrieve uffd groups.'}
                 </div>
             );
         }
         if (this.props.groups.length === 0) {
             return (
                 <div className='groups-list-empty'>
-                    No groups found.
+                    {'No groups found.'}
                 </div>
             );
         }

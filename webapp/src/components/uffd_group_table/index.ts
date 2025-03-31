@@ -6,8 +6,7 @@ import type {GlobalState} from '@mattermost/types/store';
 
 import {getGroups as fetchGroups} from 'mattermost-redux/actions/groups';
 import {createSelector} from 'mattermost-redux/selectors/create_selector';
-import {getAllGroups, getAllCustomGroups} from 'mattermost-redux/selectors/entities/groups';
-
+import {getAllGroups} from 'mattermost-redux/selectors/entities/groups';
 
 import UffdGroupTable from './UffdGroupTable';
 
