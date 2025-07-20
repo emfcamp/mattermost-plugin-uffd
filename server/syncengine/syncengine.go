@@ -172,6 +172,10 @@ func (s *SyncEngine) FullSyncGroups(ctx context.Context, c *Cache, out *Outcome)
 
 			for n, createdGroup := range createdGroups {
 				originalGroup := groupsToCreate[n]
+				if len(originalGroup.MemberUserIDs) == 0 {
+					// Can't add nobody to the group.
+					continue
+				}
 				members := make([]string, 0, len(originalGroup.MemberUserIDs))
 				for _, idpID := range originalGroup.MemberUserIDs {
 					serviceUser, ok := serviceUsersByIDPID[idpID]
