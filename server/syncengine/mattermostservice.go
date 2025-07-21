@@ -26,8 +26,10 @@ type mattermostPluginAPI interface {
 	GetUsers(*model.UserGetOptions) ([]*model.User, *model.AppError)
 	CreateUser(*model.User) (*model.User, *model.AppError)
 	GetUser(userID string) (*model.User, *model.AppError)
+	GetUserByEmail(userID string) (*model.User, *model.AppError)
 	UpdateUser(*model.User) (*model.User, *model.AppError)
 	UpdateUserActive(userID string, active bool) *model.AppError
+	UpdateUserAuth(userID string, userAuth *model.UserAuth) (*model.UserAuth, *model.AppError)
 
 	GetGroupsBySource(source model.GroupSource) ([]*model.Group, *model.AppError)
 	CreateGroup(*model.Group) (*model.Group, *model.AppError)
@@ -184,8 +186,40 @@ func (s *MattermostService) CreateUsers(ctx context.Context, users []*User[int])
 		})
 		if appErr != nil {
 			l.WithError(appErr).Errorf("creating user %v", u.Username)
-			mergedErr = errors.Join(mergedErr, fmt.Errorf("creating user %v: %w", u.Username, appErr))
-			continue
+			// Try to fetch them by email instead; if we can, then we'll actually update them.
+			var appErrByEmail *model.AppError
+			retUser, appErrByEmail = s.API.GetUserByEmail(u.Email)
+			if appErrByEmail != nil {
+				l.WithError(appErrByEmail).Errorf("trying to fetch user %v by email %v", u.Username, u.Email)
+				mergedErr = errors.Join(mergedErr, fmt.Errorf("creating user %v: %w", u.Username, appErr))
+				continue
+			}
+
+			// We have a user, sync their state.
+			if _, appErr := s.API.UpdateUserAuth(retUser.Id, &model.UserAuth{
+				AuthService: "openid",
+				AuthData:    &authData,
+			}); appErr != nil {
+				l.WithError(appErr).Errorf("second-chance (by email) updating user auth to OAuth for %v (%v, email: %v)", retUser.Username, retUser.Id, retUser.Email)
+				mergedErr = errors.Join(mergedErr, fmt.Errorf("updating found-by-email user %v's auth service to OAuth: %w", retUser.Id, appErr))
+				continue
+			}
+			retUser.Username = u.Username
+			retUser.Email = u.Email
+			retUser.Nickname = u.DisplayName
+			if retUser.Props == nil {
+				retUser.Props = map[string]string{}
+			}
+			retUser.Props[MMIdPUsernameProp] = u.Username
+			retUser.Props[MMIdPUserIDProp] = authData
+			retUser, appErr = s.API.UpdateUser(retUser)
+			if appErr != nil {
+				l.WithError(appErr).Errorf("second-chance (by email) updating user %v (%v, email: %v)", retUser.Username, retUser.Id, retUser.Email)
+				mergedErr = errors.Join(mergedErr, fmt.Errorf("updating found-by-email user %v: %w", retUser.Id, appErr))
+				continue
+			}
+			// We found an account with the same email and joined it to OIDC.
+			// Now we handle it as though we just freshly creatd it.
 		}
 
 		if !u.Active {

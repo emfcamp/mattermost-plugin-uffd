@@ -26,6 +26,13 @@ func (f *fakeMattermostPluginAPI) CreateGroup(g *model.Group) (*model.Group, *mo
 
 // CreateUser implements mattermostPluginAPI.
 func (f *fakeMattermostPluginAPI) CreateUser(u *model.User) (*model.User, *model.AppError) {
+	// Emails must be unique
+	for _, u2 := range f.Users {
+		if u.Email == u2.Email {
+			return nil, model.NewAppError("test", "test", nil, "user with email already exists", 500)
+		}
+	}
+
 	u = u.DeepCopy()
 	u.Id = fmt.Sprintf("id::user::%v", u.Username)
 	f.Users = append(f.Users, u.DeepCopy())
@@ -130,6 +137,16 @@ func (f *fakeMattermostPluginAPI) GetUser(userID string) (*model.User, *model.Ap
 	return nil, model.NewAppError("test", "test", nil, "no such user", 404)
 }
 
+// GetUserByEmail implements mattermostPluginAPI.
+func (f *fakeMattermostPluginAPI) GetUserByEmail(email string) (*model.User, *model.AppError) {
+	for _, u := range f.Users {
+		if u.Email == email {
+			return u.DeepCopy(), nil
+		}
+	}
+	return nil, model.NewAppError("test", "test", nil, "no such user", 404)
+}
+
 // GetUsers implements mattermostPluginAPI.
 func (f *fakeMattermostPluginAPI) GetUsers(opts *model.UserGetOptions) ([]*model.User, *model.AppError) {
 	return xmap(slicePage(f.Users, opts.Page, opts.PerPage), (*model.User).DeepCopy), nil
@@ -143,6 +160,7 @@ func (f *fakeMattermostPluginAPI) UpdateUser(in *model.User) (*model.User, *mode
 			u.Email = in.Email
 			u.EmailVerified = in.EmailVerified
 			u.Nickname = in.Nickname
+			u.Props = in.Props
 			return u.DeepCopy(), nil
 		}
 	}
@@ -162,6 +180,21 @@ func (f *fakeMattermostPluginAPI) UpdateUserActive(userID string, active bool) *
 		}
 	}
 	return model.NewAppError("test", "test", nil, "no such user", 404)
+}
+
+// UpdateUserAuth implements mattermostPluginAPI.
+func (f *fakeMattermostPluginAPI) UpdateUserAuth(userID string, auth *model.UserAuth) (*model.UserAuth, *model.AppError) {
+	for _, u := range f.Users {
+		if u.Id == userID {
+			u.AuthService = auth.AuthService
+			u.AuthData = auth.AuthData
+			return &model.UserAuth{
+				AuthService: u.AuthService,
+				AuthData:    u.AuthData,
+			}, nil
+		}
+	}
+	return nil, model.NewAppError("test", "test", nil, "no such user", 404)
 }
 
 // UpsertGroupMembers implements mattermostPluginAPI.
@@ -260,6 +293,56 @@ func TestMattermostFetchUsers(t *testing.T) {
 }
 
 func ptr[T any](t T) *T { return &t }
+
+func TestMattermostCreateUsersThatAreUnassociated(t *testing.T) {
+	p := &fakeMattermostPluginAPI{
+		Users: []*model.User{{
+			Id:          "some::nonmatch::id",
+			Username:    "some-other-username",
+			Nickname:    "Some Old Nickname",
+			Email:       "testuser@example.com",
+			AuthService: "email",
+		}},
+	}
+	m := &MattermostService{p}
+
+	got, err := m.CreateUsers(context.Background(), []*User[int]{{
+		UserID:      1000,
+		Username:    "testuser",
+		DisplayName: "Test User",
+		Email:       "testuser@example.com",
+		Active:      true,
+	}})
+	if err != nil {
+		t.Fatalf("CreateUsers: %v", err)
+	}
+
+	want := []*User[string]{{
+		UserID:      "some::nonmatch::id",
+		Username:    "testuser",
+		DisplayName: "Test User",
+		Email:       "testuser@example.com",
+		Active:      true,
+
+		IDPUserID:     1000,
+		ServiceUserID: "some::nonmatch::id",
+		ServiceUser: &model.User{
+			Id:          "some::nonmatch::id",
+			Username:    "testuser",
+			Nickname:    "Test User",
+			AuthData:    ptr("1000"),
+			AuthService: "openid",
+			Email:       "testuser@example.com",
+			Props: map[string]string{
+				MMIdPUserIDProp:   "1000",
+				MMIdPUsernameProp: "testuser",
+			},
+		},
+	}}
+	if diff := cmp.Diff(got, want); diff != "" {
+		t.Fatalf("CreateUsers diff (-got +want):\n%s", diff)
+	}
+}
 
 func TestMattermostFetchGroups(t *testing.T) {
 	p := &fakeMattermostPluginAPI{
@@ -539,7 +622,7 @@ func TestMattermostUpdateUsers(t *testing.T) {
 			EmailVerified: true,
 			Props: map[string]string{
 				MMIdPUserIDProp:   "1000",
-				MMIdPUsernameProp: "testuser",
+				MMIdPUsernameProp: "nowdisabled",
 			},
 			DisableWelcomeEmail: true,
 			DeleteAt:            1000,
@@ -562,7 +645,7 @@ func TestMattermostUpdateUsers(t *testing.T) {
 			EmailVerified: true,
 			Props: map[string]string{
 				MMIdPUserIDProp:   "1001",
-				MMIdPUsernameProp: "testuser2",
+				MMIdPUsernameProp: "newuser2",
 			},
 			DisableWelcomeEmail: true,
 		},
