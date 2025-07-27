@@ -147,6 +147,16 @@ func (f *fakeMattermostPluginAPI) GetUserByEmail(email string) (*model.User, *mo
 	return nil, model.NewAppError("test", "test", nil, "no such user", 404)
 }
 
+// GetUserByUsername implements mattermostPluginAPI.
+func (f *fakeMattermostPluginAPI) GetUserByUsername(username string) (*model.User, *model.AppError) {
+	for _, u := range f.Users {
+		if u.Username == username {
+			return u.DeepCopy(), nil
+		}
+	}
+	return nil, model.NewAppError("test", "test", nil, "no such user", 404)
+}
+
 // GetUsers implements mattermostPluginAPI.
 func (f *fakeMattermostPluginAPI) GetUsers(opts *model.UserGetOptions) ([]*model.User, *model.AppError) {
 	return xmap(slicePage(f.Users, opts.Page, opts.PerPage), (*model.User).DeepCopy), nil
@@ -228,6 +238,11 @@ func (f *fakeMattermostPluginAPI) UpsertGroupMembers(groupID string, memberIDs [
 	}
 
 	return out, nil
+}
+
+// CreateSession implements mattermostPluginAPI.
+func (f *fakeMattermostPluginAPI) CreateSession(session *model.Session) (*model.Session, *model.AppError) {
+	panic("unimplemented")
 }
 
 var _ mattermostPluginAPI = (*fakeMattermostPluginAPI)(nil)

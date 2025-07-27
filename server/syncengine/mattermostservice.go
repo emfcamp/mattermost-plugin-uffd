@@ -25,6 +25,7 @@ type mattermostPluginAPI interface {
 	CreateUser(*model.User) (*model.User, *model.AppError)
 	GetUser(userID string) (*model.User, *model.AppError)
 	GetUserByEmail(userID string) (*model.User, *model.AppError)
+	GetUserByUsername(name string) (*model.User, *model.AppError)
 	UpdateUser(*model.User) (*model.User, *model.AppError)
 	UpdateUserActive(userID string, active bool) *model.AppError
 	UpdateUserAuth(userID string, userAuth *model.UserAuth) (*model.UserAuth, *model.AppError)
@@ -36,6 +37,8 @@ type mattermostPluginAPI interface {
 	GetGroupMemberUsers(groupID string, page, perPage int) ([]*model.User, *model.AppError)
 	UpsertGroupMembers(groupID string, memberIDs []string) ([]*model.GroupMember, *model.AppError)
 	DeleteGroupMember(groupID, memberID string) (*model.GroupMember, *model.AppError)
+
+	CreateSession(session *model.Session) (*model.Session, *model.AppError)
 }
 
 var _ mattermostPluginAPI = (plugin.API)(nil)

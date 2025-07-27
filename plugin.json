@@ -31,6 +31,13 @@
 			"default": ""
 		},
 		{
+			"key": "SyncAsCustomGroups",
+			"display_name": "Sync groups as custom groups",
+			"type": "bool",
+			"help_text": "Instead of syncing groups as plugin-owned groups, sync them as 'custom groups' owned by system-bot. This is compatible with the Professional license tier.",
+			"default": false
+		},
+		{
 			"key": "EnabledGroup",
 			"display_name": "Name of group that gates access to Mattermost in uffd",
 			"type": "text",

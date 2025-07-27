@@ -45,6 +45,12 @@ type configuration struct {
 	// be removed.
 	SyncGroupRegex string
 
+	// SyncAsCustomGroups switches to a Professional-license compatible sync model.
+	//
+	// This creates the groups as "custom groups" owned by system-bot, rather than
+	// as plugin groups.
+	SyncAsCustomGroups bool
+
 	// EnabledGroup defines the name of a group that, if a user is present in it,
 	// causes the user to be enabled for Mattermost.
 	// This should usually match how the OIDC service is configured in uffd.

@@ -21,6 +21,8 @@ type MattermostPluginGroupBackend struct {
 	API mattermostPluginAPI
 }
 
+var _ MattermostGroupBackend = ((*MattermostPluginGroupBackend)(nil))
+
 func mattermostPluginGroupToSyncGroup(ctx context.Context, s *MattermostPluginGroupBackend, serviceGroup *model.Group) (*Group[string], error) {
 	groupMembers, err := paginator.FetchPaginated(mmDefaultPageSize, func(page, perPage int) ([]string, error) {
 		us, err := s.API.GetGroupMemberUsers(serviceGroup.Id, page, perPage)

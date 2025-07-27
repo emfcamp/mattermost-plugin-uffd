@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/mattermost/mattermost/server/public/model"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/lukegb/mattermost-plugin-uffd/server/ctxlog"
@@ -27,6 +29,26 @@ func (p *Plugin) runSync(ctx context.Context, trigger string) error {
 	cfg := p.getConfiguration()
 
 	l.Info("Performing UFFD group sync")
+	var groupBackend syncengine.MattermostGroupBackend = &syncengine.MattermostPluginGroupBackend{
+		API: p.API,
+	}
+	ftr := p.API.GetLicense().Features
+	if ftr == nil || ftr.LDAPGroups == nil || *ftr.LDAPGroups == false {
+		l.Warning("Force-enabling custom-groups syncing: installed license does not have LDAP groups support!")
+		cfg.SyncAsCustomGroups = true
+	}
+	if cfg.SyncAsCustomGroups {
+		l.Info("Syncing as custom groups")
+		siteURL := p.API.GetConfig().ServiceSettings.SiteURL
+		if siteURL == nil {
+			return fmt.Errorf("site url setting is missing")
+		}
+		groupBackend = &syncengine.MattermostRESTGroupBackend{
+			PluginAPI: p.API,
+			RESTAPI:   model.NewAPIv4Client(*siteURL),
+		}
+	}
+
 	se := &syncengine.SyncEngine{
 		IDP: &syncengine.UffdIDP{
 			API:              p.uffd,
@@ -34,7 +56,8 @@ func (p *Plugin) runSync(ctx context.Context, trigger string) error {
 			GroupFilterRegex: cfg.SyncGroupRegex,
 		},
 		Service: &syncengine.MattermostService{
-			API: p.API,
+			MattermostGroupBackend: groupBackend,
+			API:                    p.API,
 		},
 	}
 	out, err := se.FullSync(ctx)
