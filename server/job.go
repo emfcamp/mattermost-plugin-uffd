@@ -33,7 +33,7 @@ func (p *Plugin) runSync(ctx context.Context, trigger string) error {
 		API: p.API,
 	}
 	ftr := p.API.GetLicense().Features
-	if ftr == nil || ftr.LDAPGroups == nil || *ftr.LDAPGroups == false {
+	if ftr == nil || ftr.LDAPGroups == nil || !*ftr.LDAPGroups {
 		l.Warning("Force-enabling custom-groups syncing: installed license does not have LDAP groups support!")
 		cfg.SyncAsCustomGroups = true
 	}

@@ -40,8 +40,8 @@ type mattermostRESTAPI interface {
 
 	// GetGroupMembers(ctx context.Context, groupID string) (*model.GroupMemberList, *model.Response, error) // This API is useless because it doesn't paginate. WTF?
 	DoAPIGet(ctx context.Context, url string, etag string) (*http.Response, error)
-	UpsertGroupMembers(ctx context.Context, groupID string, userIds *model.GroupModifyMembers) ([]*model.GroupMember, *model.Response, error)
-	DeleteGroupMembers(ctx context.Context, groupID string, userIds *model.GroupModifyMembers) ([]*model.GroupMember, *model.Response, error)
+	UpsertGroupMembers(ctx context.Context, groupID string, userIDs *model.GroupModifyMembers) ([]*model.GroupMember, *model.Response, error)
+	DeleteGroupMembers(ctx context.Context, groupID string, userIDs *model.GroupModifyMembers) ([]*model.GroupMember, *model.Response, error)
 }
 
 var _ mattermostRESTAPI = ((*model.Client4)(nil))

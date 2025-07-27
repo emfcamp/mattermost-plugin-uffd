@@ -247,6 +247,15 @@ func (f *fakeMattermostPluginAPI) CreateSession(session *model.Session) (*model.
 
 var _ mattermostPluginAPI = (*fakeMattermostPluginAPI)(nil)
 
+func makeService(p *fakeMattermostPluginAPI) *MattermostService {
+	return &MattermostService{
+		MattermostGroupBackend: &MattermostPluginGroupBackend{
+			API: p,
+		},
+		API: p,
+	}
+}
+
 func TestMattermostFetchUsers(t *testing.T) {
 	p := &fakeMattermostPluginAPI{
 		Users: []*model.User{{
@@ -276,7 +285,7 @@ func TestMattermostFetchUsers(t *testing.T) {
 			AuthService: "password",
 		}},
 	}
-	m := &MattermostService{&MattermostPluginGroupBackend{p}, p}
+	m := makeService(p)
 
 	want := []*User[string]{{
 		UserID:        "id::user::testuser",
@@ -319,7 +328,7 @@ func TestMattermostCreateUsersThatAreUnassociated(t *testing.T) {
 			AuthService: "email",
 		}},
 	}
-	m := &MattermostService{&MattermostPluginGroupBackend{p}, p}
+	m := makeService(p)
 
 	got, err := m.CreateUsers(context.Background(), []*User[int]{{
 		UserID:      1000,
@@ -391,7 +400,7 @@ func TestMattermostFetchGroups(t *testing.T) {
 			UserId:  "id::user::testuser",
 		}},
 	}
-	m := &MattermostService{&MattermostPluginGroupBackend{p}, p}
+	m := makeService(p)
 
 	want := []*Group[string]{{
 		GroupID:       "id::group::testgroup",
@@ -417,7 +426,7 @@ func TestMattermostFetchGroups(t *testing.T) {
 
 func TestMattermostCreateUsers(t *testing.T) {
 	p := &fakeMattermostPluginAPI{}
-	m := &MattermostService{&MattermostPluginGroupBackend{p}, p}
+	m := makeService(p)
 
 	got, err := m.CreateUsers(context.Background(), []*User[int]{{
 		UserID:      1000,
@@ -491,7 +500,7 @@ func TestMattermostCreateUsers(t *testing.T) {
 
 func TestMattermostCreateGroups(t *testing.T) {
 	p := &fakeMattermostPluginAPI{}
-	m := &MattermostService{&MattermostPluginGroupBackend{p}, p}
+	m := makeService(p)
 
 	got, err := m.CreateGroups(context.Background(), []*Group[int]{{
 		GroupID:       1000,
@@ -588,7 +597,7 @@ func TestMattermostUpdateUsers(t *testing.T) {
 			DisableWelcomeEmail: true,
 		}},
 	}
-	m := &MattermostService{&MattermostPluginGroupBackend{p}, p}
+	m := makeService(p)
 
 	got, updated, err := m.UpdateUsers(context.Background(), []*User[string]{{
 		UserID:      "id::user::testuser",
@@ -739,7 +748,7 @@ func TestMattermostDeleteGroups(t *testing.T) {
 			Source:      MMPluginSource,
 		}},
 	}
-	m := &MattermostService{&MattermostPluginGroupBackend{p}, p}
+	m := makeService(p)
 
 	err := m.DeleteGroups(context.Background(), []*Group[string]{{
 		GroupID: "id::group::testgroup",
@@ -780,7 +789,7 @@ func TestMattermostAddGroupMembers(t *testing.T) {
 			Source:      MMPluginSource,
 		}},
 	}
-	m := &MattermostService{&MattermostPluginGroupBackend{p}, p}
+	m := makeService(p)
 
 	err := m.AddGroupMembers(context.Background(), "id::group::testgroup", []string{"id::user::testuser"})
 	if err != nil {
@@ -821,7 +830,7 @@ func TestMattermostRemoveGroupMembers(t *testing.T) {
 			GroupId: "id::group::testgroup",
 		}},
 	}
-	m := &MattermostService{&MattermostPluginGroupBackend{p}, p}
+	m := makeService(p)
 
 	err := m.RemoveGroupMembers(context.Background(), "id::group::testgroup", []string{"id::user::testuser"})
 	if err != nil {
