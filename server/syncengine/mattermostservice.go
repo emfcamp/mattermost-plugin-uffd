@@ -14,8 +14,6 @@ import (
 )
 
 const (
-	MMPluginSource model.GroupSource = "plugin_uffd"
-
 	MMIdPUserIDProp   = "idp/userid"
 	MMIdPUsernameProp = "idp/username"
 
@@ -42,7 +40,16 @@ type mattermostPluginAPI interface {
 
 var _ mattermostPluginAPI = (plugin.API)(nil)
 
+type MattermostGroupBackend interface {
+	FetchGroups(context.Context) ([]*Group[string], error)
+	CreateGroups(context.Context, []*Group[int]) ([]*Group[string], error)
+	AddGroupMembers(ctx context.Context, groupID string, members []string) error
+	RemoveGroupMembers(ctx context.Context, groupID string, members []string) error
+	DeleteGroups(context.Context, []*Group[string]) error
+}
+
 type MattermostService struct {
+	MattermostGroupBackend
 	API mattermostPluginAPI
 }
 
@@ -100,66 +107,6 @@ func (s *MattermostService) FetchUsers(ctx context.Context) ([]*User[string], er
 			return nil, fmt.Errorf("fetching users from Mattermost: %w", err)
 		}
 		out = append(out, u)
-	}
-	return out, nil
-}
-
-func mattermostGroupToSyncGroup(ctx context.Context, s *MattermostService, serviceGroup *model.Group) (*Group[string], error) {
-	groupMembers, err := paginator.FetchPaginated(mmDefaultPageSize, func(page, perPage int) ([]string, error) {
-		us, err := s.API.GetGroupMemberUsers(serviceGroup.Id, page, perPage)
-		if err != nil {
-			return nil, err
-		}
-		userIDs := make([]string, len(us))
-		for n, u := range us {
-			userIDs[n] = u.Id
-		}
-		return userIDs, nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("fetching group membership for group %v from Mattermost: %w", serviceGroup.Id, err)
-	}
-
-	return &Group[string]{
-		GroupID:       serviceGroup.Id,
-		Name:          serviceGroup.GetName(),
-		IDPID:         serviceGroup.GetRemoteId(),
-		MemberUserIDs: groupMembers,
-
-		ServiceGroup: serviceGroup,
-	}, nil
-}
-
-func (s *MattermostService) FetchGroups(ctx context.Context) ([]*Group[string], error) {
-	serviceGroups, err := s.API.GetGroupsBySource(MMPluginSource)
-	if err != nil {
-		return nil, fmt.Errorf("fetching groups for source %v from Mattermost: %w", MMPluginSource, err)
-	}
-
-	out := make([]*Group[string], 0, len(serviceGroups))
-	for _, serviceGroup := range serviceGroups {
-		groupMembers, err := paginator.FetchPaginated(mmDefaultPageSize, func(page, perPage int) ([]string, error) {
-			us, err := s.API.GetGroupMemberUsers(serviceGroup.Id, page, perPage)
-			if err != nil {
-				return nil, err
-			}
-			userIDs := make([]string, len(us))
-			for n, u := range us {
-				userIDs[n] = u.Id
-			}
-			return userIDs, nil
-		})
-		if err != nil {
-			return nil, fmt.Errorf("fetching group membership for group %v from Mattermost: %w", serviceGroup.Id, err)
-		}
-
-		out = append(out, &Group[string]{
-			GroupID:       serviceGroup.Id,
-			Name:          serviceGroup.GetName(),
-			IDPID:         serviceGroup.GetRemoteId(),
-			MemberUserIDs: groupMembers,
-			ServiceGroup:  serviceGroup,
-		})
 	}
 	return out, nil
 }
@@ -250,39 +197,6 @@ func (s *MattermostService) CreateUsers(ctx context.Context, users []*User[int])
 	return out, nil
 }
 
-func (s *MattermostService) CreateGroups(ctx context.Context, groups []*Group[int]) ([]*Group[string], error) {
-	l := ctxlog.FromContext(ctx)
-	out := make([]*Group[string], len(groups))
-	var mergedErr error
-	for n, g := range groups {
-		remoteID := fmt.Sprintf("%v", g.GroupID)
-		serviceGroup, appErr := s.API.CreateGroup(&model.Group{
-			Name:        &g.Name,
-			DisplayName: g.Name,
-			Description: fmt.Sprintf("uffd group %v", g.Name),
-			Source:      MMPluginSource,
-			RemoteId:    &remoteID,
-		})
-		if appErr != nil {
-			l.WithError(appErr).Errorf("creating group %v", g.Name)
-			mergedErr = errors.Join(mergedErr, fmt.Errorf("creating group %v: %w", g.Name, appErr))
-			continue
-		}
-
-		ng, err := mattermostGroupToSyncGroup(ctx, s, serviceGroup)
-		if err != nil {
-			l.WithError(err).Errorf("validating created group %v (%v)", g.Name, serviceGroup.Id)
-			mergedErr = errors.Join(mergedErr, fmt.Errorf("validating created group %v: %w", g.Name, err))
-			continue
-		}
-		out[n] = ng
-	}
-	if mergedErr != nil {
-		return nil, mergedErr
-	}
-	return out, nil
-}
-
 func (s *MattermostService) UpdateUsers(ctx context.Context, users []*User[string]) ([]*User[string], []bool, error) {
 	l := ctxlog.FromContext(ctx)
 	var mergedErr error
@@ -365,37 +279,4 @@ func (s *MattermostService) UpdateUsers(ctx context.Context, users []*User[strin
 func (s *MattermostService) UpdateGroups(ctx context.Context, groups []*Group[string]) ([]*Group[string], []bool, error) {
 	// Unimplemented.
 	return groups, make([]bool, len(groups)), nil
-}
-
-func (s *MattermostService) DeleteGroups(ctx context.Context, groups []*Group[string]) error {
-	l := ctxlog.FromContext(ctx)
-	var mergedErr error
-	for _, group := range groups {
-		if _, appErr := s.API.DeleteGroup(group.GroupID.(string)); appErr != nil {
-			l.WithError(appErr).Errorf("deleting group %v (%v)", group.Name, group.GroupID)
-			mergedErr = errors.Join(mergedErr, fmt.Errorf("deleting group %v: %w", group.Name, appErr))
-		}
-	}
-	return mergedErr
-}
-
-func (s *MattermostService) AddGroupMembers(ctx context.Context, groupID string, memberIDs []string) error {
-	_, appErr := s.API.UpsertGroupMembers(groupID, memberIDs)
-	if appErr != nil {
-		ctxlog.FromContext(ctx).WithError(appErr).Errorf("adding group members to %v", groupID)
-		return appErr
-	}
-	return nil
-}
-
-func (s *MattermostService) RemoveGroupMembers(ctx context.Context, groupID string, memberIDs []string) error {
-	var mergedErr error
-	for _, memberID := range memberIDs {
-		_, appErr := s.API.DeleteGroupMember(groupID, memberID)
-		if appErr != nil {
-			ctxlog.FromContext(ctx).WithError(appErr).Errorf("deleting group member %v from %v", memberID, groupID)
-			mergedErr = errors.Join(mergedErr, appErr)
-		}
-	}
-	return mergedErr
 }
