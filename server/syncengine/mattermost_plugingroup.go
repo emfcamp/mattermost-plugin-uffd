@@ -5,9 +5,10 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/mattermost/mattermost/server/public/model"
+
 	"github.com/lukegb/mattermost-plugin-uffd/server/ctxlog"
 	"github.com/lukegb/mattermost-plugin-uffd/server/paginator"
-	"github.com/mattermost/mattermost/server/public/model"
 )
 
 const (

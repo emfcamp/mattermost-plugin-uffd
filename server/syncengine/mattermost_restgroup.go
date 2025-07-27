@@ -11,9 +11,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mattermost/mattermost/server/public/model"
+
 	"github.com/lukegb/mattermost-plugin-uffd/server/ctxlog"
 	"github.com/lukegb/mattermost-plugin-uffd/server/paginator"
-	"github.com/mattermost/mattermost/server/public/model"
 )
 
 // MattermostRESTGroupBackend uses the Mattermost REST API to manipulate groups as a bot account.
