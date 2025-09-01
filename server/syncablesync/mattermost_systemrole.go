@@ -108,3 +108,7 @@ func (h *mattermostSystemRoleHandler) DeleteMembers(ctx context.Context, st Sync
 func (h *mattermostSystemRoleHandler) UpdateMembers(ctx context.Context, st SyncableTarget, rms []RosterMember) error {
 	return fmt.Errorf("updating members doesn't make sense for system roles")
 }
+
+func (h *mattermostSystemRoleHandler) IsAddOnlyTarget(ctx context.Context, st SyncableTarget) (bool, error) {
+	return false, nil
+}

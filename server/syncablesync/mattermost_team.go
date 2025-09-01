@@ -112,3 +112,7 @@ func (h *mattermostTeamHandler) UpdateMembers(ctx context.Context, st SyncableTa
 	}
 	return nil
 }
+
+func (h *mattermostTeamHandler) IsAddOnlyTarget(ctx context.Context, st SyncableTarget) (bool, error) {
+	return true, nil
+}

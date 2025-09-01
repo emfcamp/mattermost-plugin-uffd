@@ -26,6 +26,8 @@ type Plugin struct {
 	// uffd is the Uffd API.
 	uffd *uffd.API
 
+	commandHandler *CommandHandler
+
 	syncJob   *cluster.Job
 	syncMutex *cluster.Mutex
 
@@ -77,6 +79,12 @@ func (p *Plugin) OnActivate() error {
 		Password:     cfg.UffdAPIPassword,
 	}
 
+	var err error
+	p.commandHandler, err = NewCommandHandler(p)
+	if err != nil {
+		return fmt.Errorf("NewCommandHandler: %w", err)
+	}
+
 	if err := p.rescheduleSync(); err != nil {
 		return fmt.Errorf("rescheduleSync: %w", err)
 	}
@@ -91,6 +99,10 @@ func (p *Plugin) OnActivate() error {
 	p.syncMutex = syncMutex
 
 	return nil
+}
+
+func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*model.CommandResponse, *model.AppError) {
+	return p.commandHandler.ExecuteCommand(c, args)
 }
 
 // OnDeactivate is invoked when the plugin is deactivated.

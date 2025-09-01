@@ -41,17 +41,20 @@ type IDPAPI interface {
 	FetchUserByID(ctx context.Context, uid int) (*User[int], error)
 }
 
+// Team represents a group of people, of which some are team leads.
+type Team struct {
+	Name    string
+	Leads   []string
+	Members []string
+}
+
 type ServiceAPI interface {
 	FetchUsers(context.Context) ([]*User[string], error)
-	FetchGroups(context.Context) ([]*Group[string], error)
-
 	CreateUsers(context.Context, []*User[int]) ([]*User[string], error)
-	CreateGroups(context.Context, []*Group[int]) ([]*Group[string], error)
-
 	UpdateUsers(context.Context, []*User[string]) ([]*User[string], []bool, error)
-	UpdateGroups(context.Context, []*Group[string]) ([]*Group[string], []bool, error)
+}
 
-	AddGroupMembers(ctx context.Context, groupID string, members []string) error
-	RemoveGroupMembers(ctx context.Context, groupID string, members []string) error
-	DeleteGroups(context.Context, []*Group[string]) error
+type DataStoreAPI interface {
+	SaveTeams(context.Context, []Team) error
+	SaveGroups(context.Context, []*Group[string]) error
 }

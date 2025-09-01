@@ -10,18 +10,34 @@ import (
 )
 
 type fakeMattermostPluginAPI struct {
-	Groups       []*model.Group
-	Users        []*model.User
-	GroupMembers []*model.GroupMember
+	Users   []*model.User
+	KVStore map[string][]byte
 }
 
-// CreateGroup implements mattermostPluginAPI.
-func (f *fakeMattermostPluginAPI) CreateGroup(g *model.Group) (*model.Group, *model.AppError) {
-	groupCopy := *g
-	groupCopy.Id = fmt.Sprintf("id::group::%s", g.GetName())
-	f.Groups = append(f.Groups, &groupCopy)
-	groupCopy2 := groupCopy
-	return &groupCopy2, nil
+// KVDelete implements mattermostPluginAPI.
+func (f *fakeMattermostPluginAPI) KVDelete(key string) *model.AppError {
+	if f.KVStore != nil {
+		delete(f.KVStore, key)
+	}
+	return nil
+}
+
+// KVGet implements mattermostPluginAPI.
+func (f *fakeMattermostPluginAPI) KVGet(key string) ([]byte, *model.AppError) {
+	val, ok := f.KVStore[key]
+	if !ok {
+		return nil, model.NewAppError("test", "test", nil, "no such key", 500)
+	}
+	return val, nil
+}
+
+// KVSet implements mattermostPluginAPI.
+func (f *fakeMattermostPluginAPI) KVSet(key string, value []byte) *model.AppError {
+	if f.KVStore == nil {
+		f.KVStore = make(map[string][]byte)
+	}
+	f.KVStore[key] = value
+	return nil
 }
 
 // CreateUser implements mattermostPluginAPI.
@@ -39,43 +55,6 @@ func (f *fakeMattermostPluginAPI) CreateUser(u *model.User) (*model.User, *model
 	return u.DeepCopy(), nil
 }
 
-// DeleteGroup implements mattermostPluginAPI.
-func (f *fakeMattermostPluginAPI) DeleteGroup(groupID string) (*model.Group, *model.AppError) {
-	newGroups := make([]*model.Group, 0, len(f.Groups)-1)
-	var foundGroup *model.Group
-	for _, g := range f.Groups {
-		if g.Id == groupID {
-			foundGroup = g
-			continue
-		}
-		newGroups = append(newGroups, g)
-	}
-	if foundGroup == nil {
-		return nil, model.NewAppError("test", "test", nil, "no group found", 404)
-	}
-	f.Groups = newGroups
-	foundGroupCopy := *foundGroup
-	return &foundGroupCopy, nil
-}
-
-// DeleteGroupMember implements mattermostPluginAPI.
-func (f *fakeMattermostPluginAPI) DeleteGroupMember(groupID string, memberID string) (*model.GroupMember, *model.AppError) {
-	newMembers := make([]*model.GroupMember, 0, len(f.GroupMembers)-1)
-	var foundMember *model.GroupMember
-	for _, gm := range f.GroupMembers {
-		if gm.GroupId == groupID && gm.UserId == memberID {
-			foundMember = gm
-			continue
-		}
-		newMembers = append(newMembers, gm)
-	}
-	if foundMember == nil {
-		return nil, model.NewAppError("test", "test", nil, "no member found", 404)
-	}
-	f.GroupMembers = newMembers
-	return foundMember, nil
-}
-
 func slicePage[T any](slice []T, page int, perPage int) []T {
 	start := perPage * page
 	end := perPage * (page + 1)
@@ -88,43 +67,12 @@ func slicePage[T any](slice []T, page int, perPage int) []T {
 	return slice[start:end]
 }
 
-// GetGroupMemberUsers implements mattermostPluginAPI.
-func (f *fakeMattermostPluginAPI) GetGroupMemberUsers(groupID string, page int, perPage int) ([]*model.User, *model.AppError) {
-	var allMembers []*model.GroupMember
-	for _, gm := range f.GroupMembers {
-		if gm.GroupId == groupID {
-			allMembers = append(allMembers, gm)
-		}
-	}
-	var out []*model.User
-	for _, gm := range slicePage(allMembers, page, perPage) {
-		for _, u := range f.Users {
-			if u.Id == gm.UserId {
-				out = append(out, u.DeepCopy())
-			}
-		}
-	}
-	return out, nil
-}
-
 func xmap[T any](xs []T, f func(t T) T) []T {
 	out := make([]T, len(xs))
 	for n, x := range xs {
 		out[n] = f(x)
 	}
 	return out
-}
-
-func copyGroups(gs []*model.Group) []*model.Group {
-	return xmap(gs, func(g *model.Group) *model.Group {
-		gs := *g
-		return &gs
-	})
-}
-
-// GetGroupsBySource implements mattermostPluginAPI.
-func (f *fakeMattermostPluginAPI) GetGroupsBySource(source model.GroupSource) ([]*model.Group, *model.AppError) {
-	return copyGroups(f.Groups), nil
 }
 
 // GetUser implements mattermostPluginAPI.
@@ -207,39 +155,6 @@ func (f *fakeMattermostPluginAPI) UpdateUserAuth(userID string, auth *model.User
 	return nil, model.NewAppError("test", "test", nil, "no such user", 404)
 }
 
-// UpsertGroupMembers implements mattermostPluginAPI.
-func (f *fakeMattermostPluginAPI) UpsertGroupMembers(groupID string, memberIDs []string) ([]*model.GroupMember, *model.AppError) {
-	out := make([]*model.GroupMember, len(memberIDs))
-
-	needMemberIDs := make(map[string]int, len(memberIDs))
-	for n, mid := range memberIDs {
-		needMemberIDs[mid] = n
-	}
-
-	for _, gm := range f.GroupMembers {
-		if gm.GroupId == groupID {
-			pos, ok := needMemberIDs[gm.UserId]
-			if ok {
-				delete(needMemberIDs, gm.UserId)
-				gmCopy := *gm
-				out[pos] = &gmCopy
-			}
-		}
-	}
-
-	for mid, pos := range needMemberIDs {
-		gm := &model.GroupMember{
-			GroupId: groupID,
-			UserId:  mid,
-		}
-		f.GroupMembers = append(f.GroupMembers, gm)
-		gmCopy := *gm
-		out[pos] = &gmCopy
-	}
-
-	return out, nil
-}
-
 // CreateSession implements mattermostPluginAPI.
 func (f *fakeMattermostPluginAPI) CreateSession(session *model.Session) (*model.Session, *model.AppError) {
 	panic("unimplemented")
@@ -249,9 +164,6 @@ var _ mattermostPluginAPI = (*fakeMattermostPluginAPI)(nil)
 
 func makeService(p *fakeMattermostPluginAPI) *MattermostService {
 	return &MattermostService{
-		MattermostGroupBackend: &MattermostPluginGroupBackend{
-			API: p,
-		},
 		API: p,
 	}
 }
@@ -368,62 +280,6 @@ func TestMattermostCreateUsersThatAreUnassociated(t *testing.T) {
 	}
 }
 
-func TestMattermostFetchGroups(t *testing.T) {
-	p := &fakeMattermostPluginAPI{
-		Users: []*model.User{{
-			Id:          "id::user::testuser",
-			Username:    "testuser",
-			Nickname:    "Test User",
-			Email:       "testuser@example.com",
-			AuthService: "openid",
-			Props: map[string]string{
-				MMIdPUserIDProp: "1000",
-			},
-		}},
-		Groups: []*model.Group{{
-			Id:          "id::group::testgroup",
-			Name:        ptr("testgroup"),
-			DisplayName: "testgroup displayname",
-			Description: "testgroup description",
-			RemoteId:    ptr("remote-testgroup"),
-			Source:      MMPluginSource,
-		}, {
-			Id:          "id::group::emptygroup",
-			Name:        ptr("emptygroup"),
-			DisplayName: "emptygroup displayname",
-			Description: "emptygroup description",
-			RemoteId:    ptr("remote-emptygroup"),
-			Source:      MMPluginSource,
-		}},
-		GroupMembers: []*model.GroupMember{{
-			GroupId: "id::group::testgroup",
-			UserId:  "id::user::testuser",
-		}},
-	}
-	m := makeService(p)
-
-	want := []*Group[string]{{
-		GroupID:       "id::group::testgroup",
-		Name:          "testgroup",
-		IDPID:         "remote-testgroup",
-		MemberUserIDs: []string{"id::user::testuser"},
-		ServiceGroup:  p.Groups[0],
-	}, {
-		GroupID:      "id::group::emptygroup",
-		Name:         "emptygroup",
-		IDPID:        "remote-emptygroup",
-		ServiceGroup: p.Groups[1],
-	}}
-
-	got, err := m.FetchGroups(context.Background())
-	if err != nil {
-		t.Fatalf("FetchGroups: %v", err)
-	}
-	if diff := cmp.Diff(got, want); diff != "" {
-		t.Errorf("FetchGroups diff (-got +want):\n%s", diff)
-	}
-}
-
 func TestMattermostCreateUsers(t *testing.T) {
 	p := &fakeMattermostPluginAPI{}
 	m := makeService(p)
@@ -495,52 +351,6 @@ func TestMattermostCreateUsers(t *testing.T) {
 	}}
 	if diff := cmp.Diff(got, want); diff != "" {
 		t.Fatalf("CreateUsers diff (-got +want):\n%s", diff)
-	}
-}
-
-func TestMattermostCreateGroups(t *testing.T) {
-	p := &fakeMattermostPluginAPI{}
-	m := makeService(p)
-
-	got, err := m.CreateGroups(context.Background(), []*Group[int]{{
-		GroupID:       1000,
-		Name:          "testgroup",
-		MemberUserIDs: []int{1000, 1001},
-	}, {
-		GroupID: 5000,
-		Name:    "testgroup2",
-	}})
-	if err != nil {
-		t.Fatalf("CreateGroups: %v", err)
-	}
-
-	want := []*Group[string]{{
-		GroupID: "id::group::testgroup",
-		Name:    "testgroup",
-		IDPID:   "1000",
-		ServiceGroup: &model.Group{
-			Id:          "id::group::testgroup",
-			Name:        ptr("testgroup"),
-			DisplayName: "testgroup",
-			Description: "uffd group testgroup",
-			Source:      MMPluginSource,
-			RemoteId:    ptr("1000"),
-		},
-	}, {
-		GroupID: "id::group::testgroup2",
-		Name:    "testgroup2",
-		IDPID:   "5000",
-		ServiceGroup: &model.Group{
-			Id:          "id::group::testgroup2",
-			Name:        ptr("testgroup2"),
-			DisplayName: "testgroup2",
-			Description: "uffd group testgroup2",
-			Source:      MMPluginSource,
-			RemoteId:    ptr("5000"),
-		},
-	}}
-	if diff := cmp.Diff(got, want); diff != "" {
-		t.Fatalf("CreateGroups diff (-got +want):\n%s", diff)
 	}
 }
 
@@ -727,117 +537,5 @@ func TestMattermostUpdateUsers(t *testing.T) {
 	}
 	if diff := cmp.Diff(updated, wantUpdated); diff != "" {
 		t.Fatalf("UpdateUsers updated diff (-got +want):\n%s", diff)
-	}
-}
-
-func TestMattermostDeleteGroups(t *testing.T) {
-	p := &fakeMattermostPluginAPI{
-		Groups: []*model.Group{{
-			Id:          "id::group::testgroup",
-			Name:        ptr("testgroup"),
-			DisplayName: "testgroup displayname",
-			Description: "testgroup description",
-			RemoteId:    ptr("remote-testgroup"),
-			Source:      MMPluginSource,
-		}, {
-			Id:          "id::group::emptygroup",
-			Name:        ptr("emptygroup"),
-			DisplayName: "emptygroup displayname",
-			Description: "emptygroup description",
-			RemoteId:    ptr("remote-emptygroup"),
-			Source:      MMPluginSource,
-		}},
-	}
-	m := makeService(p)
-
-	err := m.DeleteGroups(context.Background(), []*Group[string]{{
-		GroupID: "id::group::testgroup",
-		Name:    "testgroup",
-		IDPID:   "remote-testgroup",
-	}, {
-		GroupID: "id::group::emptygroup",
-		Name:    "emptygroup",
-		IDPID:   "remote-emptygroup",
-	}})
-	if err != nil {
-		t.Fatalf("DeleteGroups: %v", err)
-	}
-
-	if len(p.Groups) > 0 {
-		t.Fatalf("DeleteGroups didn't delete the groups")
-	}
-}
-
-func TestMattermostAddGroupMembers(t *testing.T) {
-	p := &fakeMattermostPluginAPI{
-		Users: []*model.User{{
-			Id:          "id::user::testuser",
-			Username:    "testuser",
-			Nickname:    "Test User",
-			Email:       "testuser@example.com",
-			AuthService: "openid",
-			Props: map[string]string{
-				MMIdPUserIDProp: "1000",
-			},
-		}},
-		Groups: []*model.Group{{
-			Id:          "id::group::testgroup",
-			Name:        ptr("testgroup"),
-			DisplayName: "testgroup displayname",
-			Description: "testgroup description",
-			RemoteId:    ptr("remote-testgroup"),
-			Source:      MMPluginSource,
-		}},
-	}
-	m := makeService(p)
-
-	err := m.AddGroupMembers(context.Background(), "id::group::testgroup", []string{"id::user::testuser"})
-	if err != nil {
-		t.Fatalf("AddGroupMembers: %v", err)
-	}
-
-	want := []*model.GroupMember{{
-		UserId:  "id::user::testuser",
-		GroupId: "id::group::testgroup",
-	}}
-	if diff := cmp.Diff(want, p.GroupMembers); diff != "" {
-		t.Errorf("AddGroupMembers diff (-want +got):\n%s", diff)
-	}
-}
-
-func TestMattermostRemoveGroupMembers(t *testing.T) {
-	p := &fakeMattermostPluginAPI{
-		Users: []*model.User{{
-			Id:          "id::user::testuser",
-			Username:    "testuser",
-			Nickname:    "Test User",
-			Email:       "testuser@example.com",
-			AuthService: "openid",
-			Props: map[string]string{
-				MMIdPUserIDProp: "1000",
-			},
-		}},
-		Groups: []*model.Group{{
-			Id:          "id::group::testgroup",
-			Name:        ptr("testgroup"),
-			DisplayName: "testgroup displayname",
-			Description: "testgroup description",
-			RemoteId:    ptr("remote-testgroup"),
-			Source:      MMPluginSource,
-		}},
-		GroupMembers: []*model.GroupMember{{
-			UserId:  "id::user::testuser",
-			GroupId: "id::group::testgroup",
-		}},
-	}
-	m := makeService(p)
-
-	err := m.RemoveGroupMembers(context.Background(), "id::group::testgroup", []string{"id::user::testuser"})
-	if err != nil {
-		t.Fatalf("RemoveGroupMembers: %v", err)
-	}
-
-	if len(p.GroupMembers) != 0 {
-		t.Errorf("RemoveGroupMembers didn't remove the group members")
 	}
 }

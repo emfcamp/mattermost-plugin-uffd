@@ -3,32 +3,29 @@ package syncengine
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-
-	"github.com/lukegb/mattermost-plugin-uffd/server/stringset"
 )
 
 type TestService struct {
 	Users  map[string]*User[string]
-	Groups map[string]*Group[string]
+	Groups []*Group[string]
+	Teams  []Team
 }
 
-// CreateGroups implements ServiceAPI.
-func (t *TestService) CreateGroups(ctx context.Context, newGroups []*Group[int]) ([]*Group[string], error) {
-	var out []*Group[string]
-	for _, g := range newGroups {
-		newGroup := &Group[string]{
-			GroupID: fmt.Sprintf("group:::%d", g.GroupID),
-			Name:    g.Name,
-		}
-		t.Groups[newGroup.GroupID.(string)] = newGroup
+// SaveGroups implements ServiceAPI.
+func (t *TestService) SaveGroups(ctx context.Context, gs []*Group[string]) error {
+	t.Groups = gs
+	return nil
+}
 
-		out = append(out, newGroup.ShallowClone())
-	}
-	return out, nil
+// SaveTeams implements ServiceAPI.
+func (t *TestService) SaveTeams(ctx context.Context, ts []Team) error {
+	t.Teams = ts
+	return nil
 }
 
 // CreateUsers implements ServiceAPI.
@@ -54,23 +51,6 @@ func (t *TestService) CreateUsers(ctx context.Context, newUsers []*User[int]) ([
 	return out, nil
 }
 
-// DeleteGroups implements ServiceAPI.
-func (t *TestService) DeleteGroups(ctx context.Context, groups []*Group[string]) error {
-	for _, g := range groups {
-		delete(t.Groups, g.GroupID.(string))
-	}
-	return nil
-}
-
-// FetchGroups implements ServiceAPI.
-func (t *TestService) FetchGroups(context.Context) ([]*Group[string], error) {
-	var out []*Group[string]
-	for _, g := range t.Groups {
-		out = append(out, g.ShallowClone())
-	}
-	return out, nil
-}
-
 // FetchUsers implements ServiceAPI.
 func (t *TestService) FetchUsers(context.Context) ([]*User[string], error) {
 	var out []*User[string]
@@ -78,50 +58,6 @@ func (t *TestService) FetchUsers(context.Context) ([]*User[string], error) {
 		out = append(out, u.ShallowClone())
 	}
 	return out, nil
-}
-
-// AddGroupMembers implements ServiceAPI.
-func (t *TestService) AddGroupMembers(ctx context.Context, groupID string, newMembers []string) error {
-	g, ok := t.Groups[groupID]
-	if !ok {
-		return fmt.Errorf("group not found")
-	}
-
-	members := stringset.FromSlice(g.MemberUserIDs)
-	members.Add(newMembers...)
-	g.MemberUserIDs = members.Sorted()
-	return nil
-}
-
-// RemoveGroupMembers implements ServiceAPI.
-func (t *TestService) RemoveGroupMembers(ctx context.Context, groupID string, removeMembers []string) error {
-	g, ok := t.Groups[groupID]
-	if !ok {
-		return fmt.Errorf("group not found")
-	}
-
-	members := stringset.FromSlice(g.MemberUserIDs)
-	members.Remove(removeMembers...)
-	g.MemberUserIDs = members.Sorted()
-	return nil
-}
-
-// UpdateGroups implements ServiceAPI.
-func (t *TestService) UpdateGroups(ctx context.Context, groups []*Group[string]) ([]*Group[string], []bool, error) {
-	var out []*Group[string]
-	var updated []bool
-	for _, inGroup := range groups {
-		g, ok := t.Groups[inGroup.GroupID.(string)]
-		if !ok {
-			return nil, nil, fmt.Errorf("group %v not found", inGroup.GroupID)
-		}
-
-		didUpdate := g.Name != inGroup.Name
-		g.Name = inGroup.Name
-		out = append(out, g.ShallowClone())
-		updated = append(updated, didUpdate)
-	}
-	return out, updated, nil
 }
 
 // UpdateUsers implements ServiceAPI.
@@ -207,6 +143,11 @@ func mutate[T clonable[T]](x T, f func(T)) T {
 	return out
 }
 
+func mutateTeam(x Team, f func(*Team)) Team {
+	f(&x)
+	return x
+}
+
 func benchmarkFullSync(b *testing.B, users, groups int) {
 	idp := &TestIDP{
 		Users:  make([]*User[int], users),
@@ -235,8 +176,7 @@ func benchmarkFullSync(b *testing.B, users, groups int) {
 
 	for n := 0; n < b.N; n++ {
 		s := &TestService{
-			Users:  make(map[string]*User[string]),
-			Groups: make(map[string]*Group[string]),
+			Users: make(map[string]*User[string]),
 		}
 		syncEngine := &SyncEngine{
 			IDP:     idp,
@@ -254,8 +194,7 @@ func TestFullSync(t *testing.T) {
 	t.Parallel()
 	emptyService := func() *TestService {
 		return &TestService{
-			Users:  make(map[string]*User[string]),
-			Groups: make(map[string]*Group[string]),
+			Users: make(map[string]*User[string]),
 		}
 	}
 	var idpLukegb = &User[int]{
@@ -280,17 +219,31 @@ func TestFullSync(t *testing.T) {
 		Name:    "foo",
 	}
 	var serviceFoo = &Group[string]{
-		GroupID: "group:::1000",
+		GroupID: "foo",
 		Name:    "foo",
 	}
 
+	var idpTeamFooLeads = &Group[int]{
+		GroupID: 2000,
+		Name:    "moderation_foo",
+	}
+	var idpTeamFooMembers = &Group[int]{
+		GroupID: 2001,
+		Name:    "team_foo",
+	}
+	var serviceTeamFoo = Team{
+		Name: "foo",
+	}
+
 	tcs := []struct {
-		name    string
-		idp     *TestIDP
-		service *TestService
+		name             string
+		idp              *TestIDP
+		service          *TestService
+		additionalGroups []string
 
 		wantUsers   map[string]*User[string]
-		wantGroups  map[string]*Group[string]
+		wantGroups  []*Group[string]
+		wantTeams   []Team
 		wantOutcome *Outcome
 	}{{
 		name: "create user",
@@ -309,146 +262,6 @@ func TestFullSync(t *testing.T) {
 			},
 		},
 	}, {
-		name: "create group",
-		idp: &TestIDP{
-			Groups: []*Group[int]{idpFoo.ShallowClone()},
-		},
-		service: emptyService(),
-		wantGroups: map[string]*Group[string]{
-			"group:::1000": serviceFoo.ShallowClone(),
-		},
-		wantOutcome: &Outcome{
-			CreatedGroups: []*Group[string]{
-				serviceFoo.ShallowClone(),
-			},
-		},
-	}, {
-		name: "create user + group",
-		idp: &TestIDP{
-			Users: []*User[int]{idpLukegb.ShallowClone()},
-			Groups: []*Group[int]{mutate(idpFoo, func(g *Group[int]) {
-				g.MemberUserIDs = []int{1000}
-			})},
-		},
-		service: emptyService(),
-		wantUsers: map[string]*User[string]{
-			"user:::lukegb": serviceLukegb.ShallowClone(),
-		},
-		wantGroups: map[string]*Group[string]{
-			"group:::1000": mutate(serviceFoo, func(g *Group[string]) {
-				g.MemberUserIDs = []string{"user:::lukegb"}
-			}),
-		},
-		wantOutcome: &Outcome{
-			CreatedUsers: []*User[string]{
-				mutate(serviceLukegb, func(u *User[string]) {
-					u.ServiceUser = "populated on create"
-				}),
-			},
-			CreatedGroups: []*Group[string]{
-				mutate(serviceFoo.ShallowClone(), func(g *Group[string]) {
-					g.MemberUserIDs = []string{"user:::lukegb"}
-				}),
-			},
-			CreatedMemberships: []Membership{{
-				GroupID: "group:::1000",
-				UserID:  "user:::lukegb",
-			}},
-		},
-	}, {
-		name: "do nothing with existing user + group",
-		idp: &TestIDP{
-			Users: []*User[int]{idpLukegb.ShallowClone()},
-			Groups: []*Group[int]{mutate(idpFoo, func(g *Group[int]) {
-				g.MemberUserIDs = []int{1000}
-			})},
-		},
-		service: &TestService{
-			Users: map[string]*User[string]{
-				"user:::lukegb": serviceLukegb.ShallowClone(),
-			},
-			Groups: map[string]*Group[string]{
-				"group:::1000": mutate(serviceFoo, func(g *Group[string]) {
-					g.MemberUserIDs = []string{"user:::lukegb"}
-				}),
-			},
-		},
-		wantUsers: map[string]*User[string]{
-			"user:::lukegb": serviceLukegb.ShallowClone(),
-		},
-		wantGroups: map[string]*Group[string]{
-			"group:::1000": mutate(serviceFoo, func(g *Group[string]) {
-				g.MemberUserIDs = []string{"user:::lukegb"}
-			}),
-		},
-		wantOutcome: &Outcome{},
-	}, {
-		name: "add existing user to existing group",
-		idp: &TestIDP{
-			Users: []*User[int]{idpLukegb.ShallowClone()},
-			Groups: []*Group[int]{mutate(idpFoo, func(g *Group[int]) {
-				g.MemberUserIDs = []int{1000}
-			})},
-		},
-		service: &TestService{
-			Users: map[string]*User[string]{
-				"user:::lukegb": serviceLukegb.ShallowClone(),
-			},
-			Groups: map[string]*Group[string]{
-				"group:::1000": serviceFoo.ShallowClone(),
-			},
-		},
-		wantUsers: map[string]*User[string]{
-			"user:::lukegb": serviceLukegb.ShallowClone(),
-		},
-		wantGroups: map[string]*Group[string]{
-			"group:::1000": mutate(serviceFoo, func(g *Group[string]) {
-				g.MemberUserIDs = []string{"user:::lukegb"}
-			}),
-		},
-		wantOutcome: &Outcome{
-			UpdatedGroups: []*Group[string]{
-				mutate(serviceFoo, func(g *Group[string]) {
-					g.MemberUserIDs = []string{"user:::lukegb"}
-				}),
-			},
-			CreatedMemberships: []Membership{{
-				GroupID: "group:::1000",
-				UserID:  "user:::lukegb",
-			}},
-		},
-	}, {
-		name: "remove user from group",
-		idp: &TestIDP{
-			Users:  []*User[int]{idpLukegb.ShallowClone()},
-			Groups: []*Group[int]{idpFoo.ShallowClone()},
-		},
-		service: &TestService{
-			Users: map[string]*User[string]{
-				"user:::lukegb": serviceLukegb.ShallowClone(),
-			},
-			Groups: map[string]*Group[string]{
-				"group:::1000": mutate(serviceFoo, func(g *Group[string]) {
-					g.MemberUserIDs = []string{"user:::lukegb"}
-				}),
-			},
-		},
-		wantUsers: map[string]*User[string]{
-			"user:::lukegb": serviceLukegb.ShallowClone(),
-		},
-		wantGroups: map[string]*Group[string]{
-			"group:::1000": serviceFoo.ShallowClone(),
-		},
-		wantOutcome: &Outcome{
-			UpdatedGroups: []*Group[string]{
-				serviceFoo.ShallowClone(),
-			},
-			RemovedMemberships: []Membership{{
-				GroupID: "group:::1000",
-				UserID:  "user:::lukegb",
-			}},
-		},
-	}, {
 		name: "disable user that disappears from IdP",
 		idp: &TestIDP{
 			Users:  []*User[int]{},
@@ -458,20 +271,13 @@ func TestFullSync(t *testing.T) {
 			Users: map[string]*User[string]{
 				"user:::lukegb": serviceLukegb.ShallowClone(),
 			},
-			Groups: map[string]*Group[string]{
-				"group:::1000": serviceFoo.ShallowClone(),
-			},
 		},
 		wantUsers: map[string]*User[string]{
 			"user:::lukegb": mutate(serviceLukegb, func(u *User[string]) {
 				u.Active = false
 			}),
 		},
-		wantGroups: map[string]*Group[string]{
-			"group:::1000": serviceFoo.ShallowClone(),
-		},
 		wantOutcome: &Outcome{
-			UpdatedGroups: []*Group[string]{},
 			UpdatedUsers: []*User[string]{
 				mutate(serviceLukegb, func(u *User[string]) {
 					u.Active = false
@@ -480,25 +286,60 @@ func TestFullSync(t *testing.T) {
 			},
 		},
 	}, {
-		name: "delete group that disappears from IdP",
+		name: "additional groups sync",
 		idp: &TestIDP{
 			Users: []*User[int]{idpLukegb.ShallowClone()},
-		},
-		service: &TestService{
-			Users: map[string]*User[string]{
-				"user:::lukegb": serviceLukegb.ShallowClone(),
-			},
-			Groups: map[string]*Group[string]{
-				"group:::1000": serviceFoo.ShallowClone(),
+			Groups: []*Group[int]{
+				mutate(idpFoo, func(g *Group[int]) {
+					g.MemberUserIDs = append(g.MemberUserIDs, idpLukegb.UserID)
+				}),
 			},
 		},
+		additionalGroups: []string{idpFoo.Name},
+		service:          emptyService(),
 		wantUsers: map[string]*User[string]{
 			"user:::lukegb": serviceLukegb.ShallowClone(),
 		},
-		wantGroups: map[string]*Group[string]{},
+		wantGroups: []*Group[string]{
+			mutate(serviceFoo, func(g *Group[string]) {
+				g.MemberUserIDs = append(g.MemberUserIDs, "user:::lukegb")
+			}),
+		},
 		wantOutcome: &Outcome{
-			DeletedGroups: []*Group[string]{
-				serviceFoo.ShallowClone(),
+			CreatedUsers: []*User[string]{
+				mutate(serviceLukegb, func(u *User[string]) {
+					u.ServiceUser = "populated on create"
+				}),
+			},
+		},
+	}, {
+		name: "team mapping",
+		idp: &TestIDP{
+			Users: []*User[int]{idpLukegb.ShallowClone()},
+			Groups: []*Group[int]{
+				mutate(idpTeamFooLeads, func(g *Group[int]) {
+					g.MemberUserIDs = append(g.MemberUserIDs, idpLukegb.UserID)
+				}),
+				mutate(idpTeamFooMembers, func(g *Group[int]) {
+					g.MemberUserIDs = append(g.MemberUserIDs, idpLukegb.UserID)
+				}),
+			},
+		},
+		service: emptyService(),
+		wantUsers: map[string]*User[string]{
+			"user:::lukegb": serviceLukegb.ShallowClone(),
+		},
+		wantTeams: []Team{
+			mutateTeam(serviceTeamFoo, func(t *Team) {
+				t.Leads = []string{"user:::lukegb"}
+				t.Members = []string{"user:::lukegb"}
+			}),
+		},
+		wantOutcome: &Outcome{
+			CreatedUsers: []*User[string]{
+				mutate(serviceLukegb, func(u *User[string]) {
+					u.ServiceUser = "populated on create"
+				}),
 			},
 		},
 	}}
@@ -507,8 +348,10 @@ func TestFullSync(t *testing.T) {
 			t.Parallel()
 
 			syncEngine := &SyncEngine{
-				IDP:     tc.idp,
-				Service: tc.service,
+				IDP:              tc.idp,
+				Service:          tc.service,
+				GroupStore:       tc.service,
+				AdditionalGroups: tc.additionalGroups,
 			}
 			ctx, cancel := context.WithCancel(context.Background())
 			t.Cleanup(cancel)
@@ -521,8 +364,11 @@ func TestFullSync(t *testing.T) {
 			if diff := cmp.Diff(tc.service.Users, tc.wantUsers, cmpopts.EquateEmpty()); diff != "" {
 				t.Errorf("users diff (-got +want):\n%s", diff)
 			}
-			if diff := cmp.Diff(tc.service.Groups, tc.wantGroups, cmpopts.EquateEmpty()); diff != "" {
+			if diff := cmp.Diff(tc.service.Groups, tc.wantGroups, cmpopts.SortSlices(func(g1, g2 *Group[string]) int { return strings.Compare(g1.Name, g2.Name) })); diff != "" {
 				t.Errorf("groups diff (-got +want):\n%s", diff)
+			}
+			if diff := cmp.Diff(tc.service.Teams, tc.wantTeams, cmpopts.SortSlices(func(t1, t2 Team) int { return strings.Compare(t1.Name, t2.Name) })); diff != "" {
+				t.Errorf("teams diff (-got +want):\n%s", diff)
 			}
 			if diff := cmp.Diff(out, tc.wantOutcome, cmpopts.EquateEmpty()); diff != "" {
 				t.Errorf("outcome diff (-got +want):\n%s", diff)
@@ -538,8 +384,11 @@ func TestFullSync(t *testing.T) {
 			if diff := cmp.Diff(tc.service.Users, tc.wantUsers, cmpopts.EquateEmpty()); diff != "" {
 				t.Errorf("users (again) diff (-got +want):\n%s", diff)
 			}
-			if diff := cmp.Diff(tc.service.Groups, tc.wantGroups, cmpopts.EquateEmpty()); diff != "" {
+			if diff := cmp.Diff(tc.service.Groups, tc.wantGroups, cmpopts.SortSlices(func(g1, g2 *Group[string]) int { return strings.Compare(g1.Name, g2.Name) })); diff != "" {
 				t.Errorf("groups (again) diff (-got +want):\n%s", diff)
+			}
+			if diff := cmp.Diff(tc.service.Teams, tc.wantTeams, cmpopts.SortSlices(func(t1, t2 Team) int { return strings.Compare(t1.Name, t2.Name) })); diff != "" {
+				t.Errorf("teams (again) diff (-got +want):\n%s", diff)
 			}
 			if diff := cmp.Diff(out2, &Outcome{}, cmpopts.EquateEmpty()); diff != "" {
 				t.Errorf("outcome (again) diff (-got +want):\n%s", diff)

@@ -30,29 +30,12 @@ type mattermostPluginAPI interface {
 	UpdateUserActive(userID string, active bool) *model.AppError
 	UpdateUserAuth(userID string, userAuth *model.UserAuth) (*model.UserAuth, *model.AppError)
 
-	GetGroupsBySource(source model.GroupSource) ([]*model.Group, *model.AppError)
-	CreateGroup(*model.Group) (*model.Group, *model.AppError)
-	DeleteGroup(groupID string) (*model.Group, *model.AppError)
-
-	GetGroupMemberUsers(groupID string, page, perPage int) ([]*model.User, *model.AppError)
-	UpsertGroupMembers(groupID string, memberIDs []string) ([]*model.GroupMember, *model.AppError)
-	DeleteGroupMember(groupID, memberID string) (*model.GroupMember, *model.AppError)
-
 	CreateSession(session *model.Session) (*model.Session, *model.AppError)
 }
 
 var _ mattermostPluginAPI = (plugin.API)(nil)
 
-type MattermostGroupBackend interface {
-	FetchGroups(context.Context) ([]*Group[string], error)
-	CreateGroups(context.Context, []*Group[int]) ([]*Group[string], error)
-	AddGroupMembers(ctx context.Context, groupID string, members []string) error
-	RemoveGroupMembers(ctx context.Context, groupID string, members []string) error
-	DeleteGroups(context.Context, []*Group[string]) error
-}
-
 type MattermostService struct {
-	MattermostGroupBackend
 	API mattermostPluginAPI
 }
 
@@ -277,9 +260,4 @@ func (s *MattermostService) UpdateUsers(ctx context.Context, users []*User[strin
 		out[n] = u
 	}
 	return out, updated, nil
-}
-
-func (s *MattermostService) UpdateGroups(ctx context.Context, groups []*Group[string]) ([]*Group[string], []bool, error) {
-	// Unimplemented.
-	return groups, make([]bool, len(groups)), nil
 }

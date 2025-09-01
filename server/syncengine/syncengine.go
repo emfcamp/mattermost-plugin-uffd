@@ -1,4 +1,4 @@
-// Package syncengine contains the syncing logic of users/groups -> a service.
+// Package syncengine contains the syncing logic of users -> a service.
 //
 // It does not handle resyncing syncables.
 package syncengine
@@ -7,30 +7,26 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 
 	"github.com/lukegb/mattermost-plugin-uffd/server/stringset"
 )
 
-type SyncEngine struct {
-	IDP     IDPAPI
-	Service ServiceAPI
-}
+var (
+	teamGroupRegexp = regexp.MustCompile(`^(moderation|team)_(.*)$`)
+)
 
-type Membership struct {
-	GroupID string
-	UserID  string
+type SyncEngine struct {
+	IDP        IDPAPI
+	Service    ServiceAPI
+	GroupStore DataStoreAPI
+
+	AdditionalGroups []string
 }
 
 type Outcome struct {
 	CreatedUsers []*User[string]
 	UpdatedUsers []*User[string]
-
-	CreatedGroups []*Group[string]
-	UpdatedGroups []*Group[string]
-	DeletedGroups []*Group[string]
-
-	CreatedMemberships []Membership
-	RemovedMemberships []Membership
 }
 
 type Cache struct {
@@ -122,142 +118,97 @@ func (s *SyncEngine) FullSyncUsers(ctx context.Context, c *Cache, out *Outcome) 
 func (s *SyncEngine) FullSyncGroups(ctx context.Context, c *Cache, out *Outcome) error {
 	idpGroups, err := s.IDP.FetchGroups(ctx)
 	if err != nil {
-		return fmt.Errorf("fetching groups from IdP: %w", err)
-	}
-
-	serviceGroups, err := s.Service.FetchGroups(ctx)
-	if err != nil {
-		return fmt.Errorf("fetching groups from service: %w", err)
-	}
-
-	idpGroupsByName := map[string]*Group[int]{}
-	for _, idpGroup := range idpGroups {
-		idpGroupsByName[idpGroup.Name] = idpGroup
-	}
-	serviceGroupsByName := map[string]*Group[string]{}
-	for _, serviceGroup := range serviceGroups {
-		serviceGroupsByName[serviceGroup.Name] = serviceGroup
+		return err
 	}
 	serviceUsersByIDPID, err := c.getServiceUsersByIDPID(ctx, s)
 	if err != nil {
-		return fmt.Errorf("fetching user<->ID mapping: %w", err)
+		return fmt.Errorf("fetching users from service: %w", err)
 	}
 
-	var groupsToCreate []*Group[int]
-	var groupsToDelete []*Group[string]
-	var groupsToUpdate []*Group[string]
+	serviceGroupFromIDPGroup := func(g *Group[int]) (*Group[string], error) {
+		sGroup := &Group[string]{
+			GroupID: g.Name,
+			Name:    g.Name,
+			IDPID:   g.IDPID,
+		}
+		for _, m := range g.MemberUserIDs {
+			serviceUser, ok := serviceUsersByIDPID[m]
+			if !ok {
+				return nil, fmt.Errorf("missing service user %v (in group %v / %v)", m, g.Name, g.GroupID)
+			}
+			sGroup.MemberUserIDs = append(sGroup.MemberUserIDs, serviceUser.ServiceUserID)
+		}
+		return sGroup, nil
+	}
 
+	// For anything in AdditionalGroups, save it literally:
+	var additionalGroups []*Group[string]
+	wantAdditionalGroups := stringset.FromSlice(s.AdditionalGroups)
 	for _, idpGroup := range idpGroups {
-		serviceGroup, ok := serviceGroupsByName[idpGroup.Name]
-		if !ok {
-			groupsToCreate = append(groupsToCreate, idpGroup)
-		} else {
-			groupsToUpdate = append(groupsToUpdate, serviceGroup)
+		if !wantAdditionalGroups.Contains(idpGroup.Name) {
+			continue
 		}
-	}
-	for _, serviceGroup := range serviceGroups {
-		if _, ok := idpGroupsByName[serviceGroup.Name]; !ok {
-			groupsToDelete = append(groupsToDelete, serviceGroup)
-		}
-	}
-
-	var mergedErr error
-	if len(groupsToCreate) > 0 {
-		err := func() error {
-			createdGroups, err := s.Service.CreateGroups(ctx, groupsToCreate)
-			if err != nil {
-				return err
-			}
-			out.CreatedGroups = append(out.CreatedGroups, createdGroups...)
-
-			for n, createdGroup := range createdGroups {
-				originalGroup := groupsToCreate[n]
-				if len(originalGroup.MemberUserIDs) == 0 {
-					// Can't add nobody to the group.
-					continue
-				}
-				members := make([]string, 0, len(originalGroup.MemberUserIDs))
-				for _, idpID := range originalGroup.MemberUserIDs {
-					serviceUser, ok := serviceUsersByIDPID[idpID]
-					if ok {
-						members = append(members, serviceUser.UserID)
-					}
-				}
-				if err := s.Service.AddGroupMembers(ctx, createdGroup.GroupID.(string), members); err != nil {
-					return fmt.Errorf("adding group members %v to %v: %w", members, createdGroup.GroupID, err)
-				}
-				for _, m := range members {
-					out.CreatedMemberships = append(out.CreatedMemberships, Membership{
-						GroupID: createdGroup.GroupID.(string),
-						UserID:  m,
-					})
-					createdGroup.MemberUserIDs = append(createdGroup.MemberUserIDs, m)
-				}
-			}
-			return nil
-		}()
+		sGroup, err := serviceGroupFromIDPGroup(idpGroup)
 		if err != nil {
-			mergedErr = errors.Join(mergedErr, err)
+			return err
 		}
+		additionalGroups = append(additionalGroups, sGroup)
 	}
-	if len(groupsToUpdate) > 0 {
-		updatedGroups, didUpdate, err := s.Service.UpdateGroups(ctx, groupsToUpdate)
+	if err := s.GroupStore.SaveGroups(ctx, additionalGroups); err != nil {
+		return fmt.Errorf("saving AdditionalGroups %v: %w", additionalGroups, err)
+	}
+
+	// Construct teams based on what groups we got from the IdP:
+	type teamDataStruct struct {
+		name         string
+		leadsGroup   *Group[string]
+		membersGroup *Group[string]
+	}
+	teamDatas := map[string]*teamDataStruct{}
+	for _, idpGroup := range idpGroups {
+		teamGroupBits := teamGroupRegexp.FindStringSubmatch(idpGroup.Name)
+		if len(teamGroupBits) < 3 {
+			continue
+		}
+		teamPart, teamName := teamGroupBits[1], teamGroupBits[2]
+		teamData := teamDatas[teamName]
+		if teamData == nil {
+			teamData = &teamDataStruct{name: teamName}
+			teamDatas[teamName] = teamData
+		}
+
+		serviceGroup, err := serviceGroupFromIDPGroup(idpGroup)
 		if err != nil {
-			mergedErr = errors.Join(mergedErr, err)
+			return err
 		}
-
-		for n, serviceGroup := range updatedGroups {
-			currentMembers := stringset.FromSlice(serviceGroup.MemberUserIDs)
-
-			idpGroup := idpGroupsByName[serviceGroup.Name]
-			wantMembers := stringset.New()
-			for _, idpMember := range idpGroup.MemberUserIDs {
-				serviceUser, ok := serviceUsersByIDPID[idpMember]
-				if ok {
-					wantMembers.Add(serviceUser.UserID)
-				}
-			}
-
-			updatedThisGroup := didUpdate[n]
-			membersToAdd := wantMembers.Difference(currentMembers).Sorted()
-			if len(membersToAdd) > 0 {
-				if err := s.Service.AddGroupMembers(ctx, serviceGroup.GroupID.(string), membersToAdd); err != nil {
-					mergedErr = errors.Join(mergedErr, fmt.Errorf("adding group members %v to group %v: %w", membersToAdd, serviceGroup.GroupID, err))
-				}
-				for _, m := range membersToAdd {
-					out.CreatedMemberships = append(out.CreatedMemberships, Membership{
-						GroupID: serviceGroup.GroupID.(string),
-						UserID:  m,
-					})
-				}
-				updatedThisGroup = true
-			}
-			membersToRemove := currentMembers.Difference(wantMembers).Sorted()
-			if len(membersToRemove) > 0 {
-				if err := s.Service.RemoveGroupMembers(ctx, serviceGroup.GroupID.(string), membersToRemove); err != nil {
-					mergedErr = errors.Join(mergedErr, fmt.Errorf("removing group members from group %v: %w", serviceGroup.GroupID, err))
-				}
-				for _, m := range membersToRemove {
-					out.RemovedMemberships = append(out.RemovedMemberships, Membership{
-						GroupID: serviceGroup.GroupID.(string),
-						UserID:  m,
-					})
-				}
-				updatedThisGroup = true
-			}
-			serviceGroup.MemberUserIDs = wantMembers.Sorted()
-			if updatedThisGroup {
-				out.UpdatedGroups = append(out.UpdatedGroups, serviceGroup)
-			}
+		switch teamPart {
+		case "moderation":
+			teamData.leadsGroup = serviceGroup
+		case "team":
+			teamData.membersGroup = serviceGroup
+		default:
+			return fmt.Errorf("unknown team part %q from %v", teamPart, teamName)
 		}
 	}
-	if len(groupsToDelete) > 0 {
-		if err := s.Service.DeleteGroups(ctx, groupsToDelete); err != nil {
-			mergedErr = errors.Join(mergedErr, err)
+	var teams []Team
+	for _, teamData := range teamDatas {
+		if teamData.leadsGroup == nil {
+			return fmt.Errorf("team %v missing a leads group", teamData.name)
 		}
-		out.DeletedGroups = append(out.DeletedGroups, groupsToDelete...)
+		if teamData.membersGroup == nil {
+			return fmt.Errorf("team %v missing a members group", teamData.name)
+		}
+		teams = append(teams, Team{
+			Name:    teamData.name,
+			Leads:   teamData.leadsGroup.MemberUserIDs,
+			Members: teamData.membersGroup.MemberUserIDs,
+		})
 	}
-	return mergedErr
+	if err := s.GroupStore.SaveTeams(ctx, teams); err != nil {
+		return fmt.Errorf("saving teams: %w", err)
+	}
+
+	return nil
 }
 
 func (s *SyncEngine) FullSync(ctx context.Context) (*Outcome, error) {

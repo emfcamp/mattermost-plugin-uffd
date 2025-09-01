@@ -37,6 +37,9 @@ type dummyServiceHandler struct {
 
 var _ SyncableHandler = ((*dummyServiceHandler)(nil))
 
+func (d *dummyServiceHandler) IsAddOnlyTarget(context.Context, SyncableTarget) (bool, error) {
+	return false, nil
+}
 func (d *dummyServiceHandler) FetchRoster(ctx context.Context, st SyncableTarget) ([]RosterMember, error) {
 	return d.s.syncableMembers[st], nil
 }

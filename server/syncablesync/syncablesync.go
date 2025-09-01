@@ -40,8 +40,6 @@ type Syncable struct {
 	Target SyncableTarget
 
 	GrantsAdmin bool
-
-	ServiceType any
 }
 
 type RosterMember struct {
@@ -56,6 +54,7 @@ type SyncableHandler interface {
 	AddMembers(context.Context, SyncableTarget, []RosterMember) error
 	DeleteMembers(context.Context, SyncableTarget, []RosterMember) error
 	UpdateMembers(context.Context, SyncableTarget, []RosterMember) error
+	IsAddOnlyTarget(context.Context, SyncableTarget) (bool, error)
 }
 
 type Group struct {
@@ -146,9 +145,27 @@ func (e *Engine) FullSync(ctx context.Context) error {
 				membersToUpdate = append(membersToUpdate, wantRM)
 			}
 		}
-		for uid, gotRM := range gotRosterMap {
-			if _, ok := wantRosterMap[uid]; !ok {
-				membersToDelete = append(membersToDelete, gotRM)
+		addOnly, err := handler.IsAddOnlyTarget(ctx, syncableTarget)
+		if err != nil {
+			return fmt.Errorf("checking if %#v is add-only: %w", syncableTarget, err)
+		}
+		if !addOnly {
+			for uid, gotRM := range gotRosterMap {
+				if _, ok := wantRosterMap[uid]; !ok {
+					membersToDelete = append(membersToDelete, gotRM)
+				}
+			}
+		} else {
+			// We do want to ensure people aren't admins unless they should be.
+			for uid, gotRM := range gotRosterMap {
+				if !gotRM.IsAdmin {
+					// If they're not already an admin then it doesn't matter.
+					continue
+				}
+				if _, ok := wantRosterMap[uid]; !ok {
+					gotRM.IsAdmin = false
+					membersToUpdate = append(membersToUpdate, gotRM)
+				}
 			}
 		}
 		l.Infof("computed diff (%d adds, %d deletes, %d updates)", len(membersToAdd), len(membersToDelete), len(membersToUpdate))

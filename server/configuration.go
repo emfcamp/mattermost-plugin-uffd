@@ -39,18 +39,6 @@ func (c *configurationDuration) UnmarshalJSON(data []byte) error {
 // If you add non-reference types to your configuration struct, be sure to rewrite Clone as a deep
 // copy appropriate for your types.
 type configuration struct {
-	// SyncGroupRegex defines a regexp that must match in order for a group
-	// to sync. If empty, all groups will be synced. Any groups not
-	// matching this regex that were previously synced by this plugin will
-	// be removed.
-	SyncGroupRegex string
-
-	// SyncAsCustomGroups switches to a Professional-license compatible sync model.
-	//
-	// This creates the groups as "custom groups" owned by system-bot, rather than
-	// as plugin groups.
-	SyncAsCustomGroups bool
-
 	// EnabledGroup defines the name of a group that, if a user is present in it,
 	// causes the user to be enabled for Mattermost.
 	// This should usually match how the OIDC service is configured in uffd.
@@ -59,9 +47,6 @@ type configuration struct {
 
 	// SystemAdminGroup defines the name of a group that will be synced to the system_admin role.
 	SystemAdminGroup string
-
-	// SystemManagerGroup defines the name of a group that will be synced to the system_manager role.
-	SystemManagerGroup string
 
 	// SyncInterval is the interval at which groups will be synced. Note
 	// that syncing can also be triggered by hitting the "sync" endpoint.

@@ -2,21 +2,76 @@ package syncablesync
 
 import (
 	"context"
+	"crypto/rand"
+	"fmt"
+	"maps"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/mattermost/mattermost/server/public/model"
 
+	"github.com/lukegb/mattermost-plugin-uffd/server/datastore"
 	"github.com/lukegb/mattermost-plugin-uffd/server/stringset"
+	"github.com/lukegb/mattermost-plugin-uffd/server/syncengine"
 )
 
 type fakeMattermost struct {
+	channels       map[string]*model.Channel
 	channelMembers map[string][]*model.ChannelMember
 	teamMembers    map[string][]*model.TeamMember
-	syncables      []*model.GroupSyncable
-	groups         []*model.Group
-	groupMembers   map[string][]string
 	users          []*model.User
+	teams          []*model.Team
+
+	kvStore map[string][]byte
+}
+
+// UpdateChannel implements mattermostAPI.
+func (f *fakeMattermost) UpdateChannel(channel *model.Channel) (*model.Channel, *model.AppError) {
+	for n, ch := range f.channels {
+		if ch.Id == channel.Id {
+			f.channels[n] = channel.DeepCopy()
+			return f.channels[n], nil
+		}
+	}
+	return nil, model.NewAppError("test", "test", nil, "channel not found", 404)
+}
+
+// GetUserByUsername implements mattermostAPI.
+func (f *fakeMattermost) GetUserByUsername(name string) (*model.User, *model.AppError) {
+	if name != model.BotSystemBotUsername {
+		return nil, model.NewAppError("test", "test", nil, "bad username", 400)
+	}
+	return &model.User{
+		Id:    "system bot",
+		Roles: "foo",
+	}, nil
+}
+
+// CreateSession implements mattermostAPI.
+func (f *fakeMattermost) CreateSession(session *model.Session) (*model.Session, *model.AppError) {
+	session = session.DeepCopy()
+	session.Token = rand.Text()
+	return session, nil
+}
+
+// GetTeams implements mattermostAPI.
+func (f *fakeMattermost) GetTeams() ([]*model.Team, *model.AppError) {
+	var out []*model.Team
+	for _, t := range f.teams {
+		out = append(out, t.ShallowCopy())
+	}
+	return out, nil
+}
+
+// GetChannel implements mattermostAPI.
+func (f *fakeMattermost) GetChannel(channelId string) (*model.Channel, *model.AppError) {
+	ch, ok := f.channels[channelId]
+	if !ok {
+		return nil, model.NewAppError("test", "test", nil, "no such channel", 404)
+	}
+	return ch, nil
 }
 
 // AddUserToChannel implements mattermostAPI.
@@ -97,34 +152,6 @@ func (f *fakeMattermost) GetChannelMembers(channelID string, page int, perPage i
 		out = append(out, *m)
 	}
 	return out, nil
-}
-
-// GetGroupMemberUsers implements mattermostAPI.
-func (f *fakeMattermost) GetGroupMemberUsers(groupID string, page int, perPage int) ([]*model.User, *model.AppError) {
-	us := slicePage(f.groupMembers[groupID], page, perPage)
-	var out []*model.User
-	for _, u := range us {
-		out = append(out, &model.User{
-			Id: u,
-		})
-	}
-	return out, nil
-}
-
-// GetGroupSyncables implements mattermostAPI.
-func (f *fakeMattermost) GetGroupSyncables(groupID string, syncableType model.GroupSyncableType) ([]*model.GroupSyncable, *model.AppError) {
-	var out []*model.GroupSyncable
-	for _, s := range f.syncables {
-		if s.GroupId == groupID && s.Type == syncableType {
-			out = append(out, s)
-		}
-	}
-	return out, nil
-}
-
-// GetGroupsBySource implements mattermostAPI.
-func (f *fakeMattermost) GetGroupsBySource(model.GroupSource) ([]*model.Group, *model.AppError) {
-	return f.groups, nil
 }
 
 // GetTeamMembers implements mattermostAPI.
@@ -208,63 +235,134 @@ func (f *fakeMattermost) UpdateUserRoles(userID string, newRoles string) (*model
 	return nil, model.NewAppError("test", "test", nil, "no such user", 404)
 }
 
+// KVDelete implements mattermostPluginAPI.
+func (f *fakeMattermost) KVDelete(key string) *model.AppError {
+	if f.kvStore != nil {
+		delete(f.kvStore, key)
+	}
+	return nil
+}
+
+// KVGet implements mattermostPluginAPI.
+func (f *fakeMattermost) KVGet(key string) ([]byte, *model.AppError) {
+	val, ok := f.kvStore[key]
+	if !ok {
+		return nil, nil
+	}
+	return val, nil
+}
+
+// KVSet implements mattermostPluginAPI.
+func (f *fakeMattermost) KVSet(key string, value []byte) *model.AppError {
+	if f.kvStore == nil {
+		f.kvStore = make(map[string][]byte)
+	}
+	f.kvStore[key] = value
+	return nil
+}
+
+// CreateChannel implements mattermostAPI.
+func (f *fakeMattermost) CreateChannel(channel *model.Channel) (*model.Channel, *model.AppError) {
+	channel = channel.DeepCopy()
+	channel.Id = fmt.Sprintf("channel:::%s:::%s", channel.TeamId, channel.Name)
+	f.channels[channel.Id] = channel
+	return channel, nil
+}
+
 var _ mattermostAPI = ((*fakeMattermost)(nil))
+
+// GetScheme implements mattermostREST.
+func (f *fakeMattermost) GetScheme(ctx context.Context, id string) (*model.Scheme, *model.Response, error) {
+	panic("unimplemented")
+}
+
+// GetAllChannels implements mattermostREST.
+func (f *fakeMattermost) GetAllChannels(ctx context.Context, page int, perPage int, etag string) (model.ChannelListWithTeamData, *model.Response, error) {
+	chs := slices.Collect(maps.Values(f.channels))
+	slices.SortFunc(chs, func(a, b *model.Channel) int { return strings.Compare(a.Id, b.Id) })
+	var out []*model.ChannelWithTeamData
+	for n := page * perPage; n < min(len(chs), (page+1)*perPage); n++ {
+		out = append(out, &model.ChannelWithTeamData{
+			Channel: *chs[n],
+		})
+	}
+	return out, &model.Response{}, nil
+}
+
+var _ mattermostREST = ((*fakeMattermost)(nil))
 
 func ptr[T any](v T) *T { return &v }
 
 func TestFetchGroupsAndSyncables(t *testing.T) {
-	testGroup := &model.Group{
-		Id:           "group:::test",
-		Name:         ptr("test"),
-		HasSyncables: true,
-	}
-	testGroupChannelSyncable := &model.GroupSyncable{
-		GroupId:     "group:::test",
-		SchemeAdmin: false,
-		Type:        model.GroupSyncableTypeChannel,
-		SyncableId:  "channel:::test",
-	}
-	testGroupTeamSyncable := &model.GroupSyncable{
-		GroupId:     "group:::test",
-		SchemeAdmin: false,
-		Type:        model.GroupSyncableTypeTeam,
-		SyncableId:  "team:::test",
-	}
-
-	testAdminGroup := &model.Group{
-		Id:           "group:::admin",
-		Name:         ptr("admin"),
-		HasSyncables: true,
-	}
-	testAdminGroupChannelSyncable := &model.GroupSyncable{
-		GroupId:     "group:::admin",
-		SchemeAdmin: true,
-		Type:        model.GroupSyncableTypeChannel,
-		SyncableId:  "channel:::test",
-	}
-	testAdminGroupTeamSyncable := &model.GroupSyncable{
-		GroupId:     "group:::admin",
-		SchemeAdmin: true,
-		Type:        model.GroupSyncableTypeTeam,
-		SyncableId:  "team:::test",
-	}
-	m := &Mattermost{
-		API: &fakeMattermost{
-			groups: []*model.Group{
-				testGroup,
-				testAdminGroup,
+	mm := &fakeMattermost{
+		teams: []*model.Team{{
+			Id: "emfcamp",
+		}},
+		channels: map[string]*model.Channel{
+			"foo": {
+				Id:          "foo",
+				Name:        "foo",
+				DisplayName: "foo",
+				TeamId:      "emfcamp",
 			},
-			groupMembers: map[string][]string{
-				"group:::test":  {"userBoth", "userUser"},
-				"group:::admin": {"userBoth", "userAdmin"},
+			"foo-private": {
+				Id:          "foo-private",
+				Name:        "foo-private",
+				DisplayName: "foo-private",
+				TeamId:      "emfcamp",
 			},
-			syncables: []*model.GroupSyncable{
-				testGroupChannelSyncable,
-				testGroupTeamSyncable,
-				testAdminGroupChannelSyncable,
-				testAdminGroupTeamSyncable,
+			"emf-announce": {
+				Id:          "emf-announce",
+				Name:        "emf-announce",
+				DisplayName: "emf-announce",
+				TeamId:      "emfcamp",
+			},
+			"emf-all": {
+				Id:          "emf-all",
+				Name:        "emf-all",
+				DisplayName: "emf-all",
+				TeamId:      "emfcamp",
+			},
+			"emf-offtopic": {
+				Id:          "emf-offtopic",
+				Name:        "emf-offtopic",
+				DisplayName: "emf-offtopic",
+				TeamId:      "emfcamp",
+			},
+			"emf-not-default-channel": {
+				Id:          "emf-not-default-channel",
+				Name:        "emf-not-default-channel",
+				DisplayName: "emf-not-default-channel",
+				TeamId:      "emfcamp",
+			},
+			"unrelated": {
+				Id:          "unrelated",
+				Name:        "unrelated",
+				DisplayName: "unrelated",
+				TeamId:      "emfcamp",
 			},
 		},
+	}
+	gs := &datastore.MattermostDataStore{API: mm}
+	ctx := context.Background()
+	if err := gs.SaveGroups(ctx, []*syncengine.Group[string]{{
+		GroupID:       "admin",
+		Name:          "admin",
+		MemberUserIDs: []string{"userAdmin"},
+	}}); err != nil {
+		t.Fatalf("SaveGroups: %v", err)
+	}
+	if err := gs.SaveTeams(ctx, []syncengine.Team{{
+		Name:    "foo",
+		Leads:   []string{"userFooLead"},
+		Members: []string{"userFooMember", "userFooLead"},
+	}}); err != nil {
+		t.Fatalf("SaveTeams: %v", err)
+	}
+	m := &Mattermost{
+		API:        mm,
+		REST:       mm,
+		GroupStore: gs,
 
 		SystemAdminGroup: "admin",
 	}
@@ -274,34 +372,54 @@ func TestFetchGroupsAndSyncables(t *testing.T) {
 	}
 
 	want := []Group{{
-		ID:      "group:::test",
-		Name:    "test",
-		Members: []string{"userBoth", "userUser"},
-		Syncables: []Syncable{
-			{Target: SyncableTarget{Type: "Channel", ID: "channel:::test"}, ServiceType: testGroupChannelSyncable},
-			{Target: SyncableTarget{Type: "Team", ID: "team:::test"}, ServiceType: testGroupTeamSyncable},
-		},
-		ServiceType: testGroup,
-	}, {
-		ID:      "group:::admin",
 		Name:    "admin",
-		Members: []string{"userBoth", "userAdmin"},
+		Members: []string{"userAdmin"},
+		Syncables: []Syncable{
+			{Target: SyncableTarget{Type: mattermostSyncableTypeSystemRole, ID: "system_admin"}},
+		},
+	}, {
+		ID:      "team-foo-leads",
+		Name:    "team-foo-leads",
+		Members: []string{"userFooLead"},
 		Syncables: []Syncable{
 			{
-				Target:      SyncableTarget{Type: "Channel", ID: "channel:::test"},
-				ServiceType: testAdminGroupChannelSyncable,
+				Target:      SyncableTarget{Type: mattermostSyncableTypeChannel, ID: "foo"},
 				GrantsAdmin: true,
 			},
 			{
-				Target:      SyncableTarget{Type: "Team", ID: "team:::test"},
-				ServiceType: testAdminGroupTeamSyncable,
+				Target:      SyncableTarget{Type: mattermostSyncableTypeChannel, ID: "foo-private"},
 				GrantsAdmin: true,
-			},
-			{
-				Target: SyncableTarget{Type: mattermostSyncableTypeSystemRole, ID: "system_admin"},
 			},
 		},
-		ServiceType: testAdminGroup,
+	}, {
+		ID:      "team-foo",
+		Name:    "team-foo",
+		Members: []string{"userFooMember", "userFooLead"},
+		Syncables: []Syncable{
+			{
+				Target: SyncableTarget{Type: mattermostSyncableTypeChannel, ID: "foo"},
+			},
+			{
+				Target: SyncableTarget{Type: mattermostSyncableTypeChannel, ID: "foo-private"},
+			},
+		},
+	}, {
+		ID:      "all-users",
+		Name:    "all-users",
+		Members: []string{"userAdmin", "userFooLead", "userFooMember"},
+		Syncables: []Syncable{
+			{Target: SyncableTarget{Type: mattermostSyncableTypeTeam, ID: "emfcamp"}},
+			{Target: SyncableTarget{Type: mattermostSyncableTypeChannel, ID: "emf-all"}},
+			{Target: SyncableTarget{Type: mattermostSyncableTypeChannel, ID: "emf-announce"}},
+			{Target: SyncableTarget{Type: mattermostSyncableTypeChannel, ID: "emf-offtopic"}},
+		},
+	}, {
+		ID:      "all-leads",
+		Name:    "all-leads",
+		Members: []string{"userFooLead"},
+		Syncables: []Syncable{
+			{Target: SyncableTarget{Type: mattermostSyncableTypeChannel, ID: "emf-announce"}, GrantsAdmin: true},
+		},
 	}}
 	if diff := cmp.Diff(got, want); diff != "" {
 		t.Errorf("FetchGroupsAndSyncables diff (-got +want):\n%s", diff)

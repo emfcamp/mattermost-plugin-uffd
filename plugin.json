@@ -23,21 +23,6 @@
         "footer": "",
         "settings": [
 		{
-			"key": "SyncGroupRegex",
-			"display_name": "Regex for groups to sync",
-			"type": "text",
-			"help_text": "A (fully-anchored) regex that must match in order for a group to sync. If left empty, all groups will be synced. Any groups not matching this regex that were previously synced by this plugin will be removed on the next sync.",
-			"placeholder": "^mattermost_.*$",
-			"default": ""
-		},
-		{
-			"key": "SyncAsCustomGroups",
-			"display_name": "Sync groups as custom groups",
-			"type": "bool",
-			"help_text": "Instead of syncing groups as plugin-owned groups, sync them as 'custom groups' owned by system-bot. This is compatible with the Professional license tier.",
-			"default": false
-		},
-		{
 			"key": "EnabledGroup",
 			"display_name": "Name of group that gates access to Mattermost in uffd",
 			"type": "text",
@@ -51,14 +36,6 @@
 			"type": "text",
 			"help_text": "A group which will grant the System Admin role. If non-empty, then users in this group will be added to the System Admin role, and removed if they are not present in the group. This only affects users synced from the IdP: locally-created users will not be touched.",
 			"placeholder": "mattermost_admin",
-			"default": ""
-		},
-		{
-			"key": "SystemManagerGroup",
-			"display_name": "Name of uffd group that will grant System Manager permissions",
-			"type": "text",
-			"help_text": "A group which will grant the System Manager role. If non-empty, then users in this group will be added to the System Manager role, and removed if they are not present in the group. This only affects users synced from the IdP: locally-created users will not be touched.",
-			"placeholder": "mattermost_manager",
 			"default": ""
 		},
 		{
