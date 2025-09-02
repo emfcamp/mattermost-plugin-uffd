@@ -155,10 +155,18 @@ func (h *CommandHandler) executeRename(ctx context.Context, c *plugin.Context, a
 		}
 	}
 
+	oldName := ch.Name
 	ch.Name = newName
 	ch.DisplayName = newName
 	if err := h.client.Channel.Update(ch); err != nil {
 		return errResponsef("Renaming the channel failed: %v", err)
+	}
+
+	// If we renamed across teams then we need to run a sync.
+	if !strings.HasPrefix(oldName, foundTeam.Name) {
+		if err := h.runSync(ctx, "channel-rename"); err != nil {
+			return errResponsef("An error occurred syncing membership information: %v", err)
+		}
 	}
 
 	return &model.CommandResponse{}, nil
