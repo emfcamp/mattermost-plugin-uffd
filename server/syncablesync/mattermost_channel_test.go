@@ -47,7 +47,7 @@ func TestChannelFetchRoster(t *testing.T) {
 func TestChannelAddMembers(t *testing.T) {
 	m := &fakeMattermost{
 		channels: map[string]*model.Channel{
-			"channel:::test": &model.Channel{
+			"channel:::test": {
 				Id: "channel:::test",
 			},
 		},
@@ -123,7 +123,7 @@ func TestChannelDeleteMembers(t *testing.T) {
 func TestChannelUpdateMembers(t *testing.T) {
 	m := &fakeMattermost{
 		channels: map[string]*model.Channel{
-			"channel:::test": &model.Channel{
+			"channel:::test": {
 				Id: "channel:::test",
 			},
 		},

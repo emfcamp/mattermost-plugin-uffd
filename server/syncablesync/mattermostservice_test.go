@@ -66,8 +66,8 @@ func (f *fakeMattermost) GetTeams() ([]*model.Team, *model.AppError) {
 }
 
 // GetChannel implements mattermostAPI.
-func (f *fakeMattermost) GetChannel(channelId string) (*model.Channel, *model.AppError) {
-	ch, ok := f.channels[channelId]
+func (f *fakeMattermost) GetChannel(channelID string) (*model.Channel, *model.AppError) {
+	ch, ok := f.channels[channelID]
 	if !ok {
 		return nil, model.NewAppError("test", "test", nil, "no such channel", 404)
 	}
@@ -290,8 +290,6 @@ func (f *fakeMattermost) GetAllChannels(ctx context.Context, page int, perPage i
 }
 
 var _ mattermostREST = ((*fakeMattermost)(nil))
-
-func ptr[T any](v T) *T { return &v }
 
 func TestFetchGroupsAndSyncables(t *testing.T) {
 	mm := &fakeMattermost{

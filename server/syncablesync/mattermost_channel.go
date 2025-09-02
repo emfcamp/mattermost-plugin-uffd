@@ -20,7 +20,7 @@ type mattermostChannelHandler struct {
 type mattermostChannelAPI interface {
 	datastore.MattermostPluginAPI
 
-	GetChannel(channelId string) (*model.Channel, *model.AppError)
+	GetChannel(channelID string) (*model.Channel, *model.AppError)
 	GetChannelMembers(channelID string, page, perPage int) (model.ChannelMembers, *model.AppError)
 	AddUserToChannel(channelID, userID, onBehalfOfUser string) (*model.ChannelMember, *model.AppError)
 	DeleteChannelMember(channelID, userID string) *model.AppError
@@ -124,7 +124,6 @@ func (h *mattermostChannelHandler) UpdateMembers(ctx context.Context, st Syncabl
 		return fmt.Errorf("getting channel %s permission scheme: %w", st.ID, err)
 	}
 	for _, rm := range rms {
-
 		oldTM := rm.ServiceType.(*model.ChannelMember)
 		roles := stringset.FromSlice(oldTM.GetRoles())
 		isAdmin := roles.Contains(sch.DefaultChannelAdminRole)

@@ -171,7 +171,9 @@ func (m *Mattermost) FetchGroupsAndSyncables(ctx context.Context) ([]Group, erro
 				Name:                ch.Name,
 				MembershipUnmanaged: false,
 			}
-			m.GroupStore.SaveChannel(ctx, chInfo)
+			if err := m.GroupStore.SaveChannel(ctx, chInfo); err != nil {
+				l.WithError(err).WithField("channelInfo", chInfo).Error("failed to save additional channel info")
+			}
 		}
 		channelInfo[ch.Id] = chInfo
 		knownChannels.Add(ch.Name)
@@ -206,18 +208,19 @@ func (m *Mattermost) FetchGroupsAndSyncables(ctx context.Context) ([]Group, erro
 			})
 			if appErr != nil {
 				return nil, fmt.Errorf("creating default public channel for team %v: %w", t.Name, appErr)
-			} else {
-				allChannels = append(allChannels, ch)
 			}
-			m.GroupStore.SaveChannel(ctx, &datastore.ChannelInfo{
+			allChannels = append(allChannels, ch)
+			if err := m.GroupStore.SaveChannel(ctx, &datastore.ChannelInfo{
 				ID:                  ch.Id,
 				Name:                t.Name,
 				MembershipUnmanaged: false,
-			})
+			}); err != nil {
+				l.WithError(err).WithField("channel_id", ch.Id).WithField("channel_name", t.Name).Error("Failed to create default public channel metadata")
+			}
 		}
 		privName := t.Name + "-private"
 		if !knownChannels.Contains(privName) {
-			// Create the default public channel for this team.
+			// Create the default private channel for this team.
 			ch, appErr := m.API.CreateChannel(&model.Channel{
 				TeamId:      theTeam.Id,
 				Type:        model.ChannelTypePrivate,
@@ -226,14 +229,15 @@ func (m *Mattermost) FetchGroupsAndSyncables(ctx context.Context) ([]Group, erro
 			})
 			if appErr != nil {
 				return nil, fmt.Errorf("creating default private channel %v for team %v: %w", privName, t.Name, appErr)
-			} else {
-				allChannels = append(allChannels, ch)
 			}
-			m.GroupStore.SaveChannel(ctx, &datastore.ChannelInfo{
+			allChannels = append(allChannels, ch)
+			if err := m.GroupStore.SaveChannel(ctx, &datastore.ChannelInfo{
 				ID:                  ch.Id,
 				Name:                privName,
 				MembershipUnmanaged: false,
-			})
+			}); err != nil {
+				l.WithError(err).WithField("channel_id", ch.Id).WithField("channel_name", t.Name).Error("Failed to create default private channel metadata")
+			}
 		}
 	}
 
@@ -361,7 +365,7 @@ func (m *Mattermost) ensureCredentials(ctx context.Context) error {
 
 	roles := u.GetRawRoles()
 	if !u.IsInRole("system_admin") {
-		roles = roles + " system_admin"
+		roles += " system_admin"
 	}
 	sess := &model.Session{
 		UserId:    u.Id,

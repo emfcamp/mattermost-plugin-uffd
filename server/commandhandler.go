@@ -8,6 +8,7 @@ import (
 	"github.com/lukegb/mattermost-plugin-uffd/server/datastore"
 	"github.com/lukegb/mattermost-plugin-uffd/server/stringset"
 	"github.com/lukegb/mattermost-plugin-uffd/server/syncengine"
+
 	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin"
 	"github.com/mattermost/mattermost/server/public/pluginapi"
@@ -134,13 +135,14 @@ func (h *CommandHandler) executeRename(ctx context.Context, c *plugin.Context, a
 	ds := &datastore.MattermostDataStore{API: h.api}
 
 	foundTeam, err := teamFromChannelName(ctx, ds, newName)
-	if err != nil {
+	switch {
+	case err != nil:
 		return errResponsef("An error occurred while checking for the team the channel belongs to: %v", err)
-	} else if foundTeam == nil {
+	case foundTeam == nil:
 		return errResponsef("Channel names need to be begin with a team name")
-	} else if ch.Name == foundTeam.Name || ch.Name == foundTeam.Name+"-private" {
+	case ch.Name == foundTeam.Name, ch.Name == foundTeam.Name+"-private":
 		return errResponsef("You can't rename the team default public or private channels")
-	} else if !h.authorizedForTeam(foundTeam, args.UserId) {
+	case !h.authorizedForTeam(foundTeam, args.UserId):
 		return errResponsef("You aren't a team lead of %s, so you can't rename channels to belong with that name.", foundTeam.Name)
 	}
 
@@ -208,11 +210,12 @@ func (h *CommandHandler) executeCreate(ctx context.Context, c *plugin.Context, a
 	ds := &datastore.MattermostDataStore{API: h.api}
 
 	foundTeam, err := teamFromChannelName(ctx, ds, newName)
-	if err != nil {
+	switch {
+	case err != nil:
 		return errResponsef("An error occurred while checking for the team the channel belongs to: %v", err)
-	} else if foundTeam == nil {
+	case foundTeam == nil:
 		return errResponsef("Channel names need to be begin with a team name")
-	} else if !h.authorizedForTeam(foundTeam, args.UserId) {
+	case !h.authorizedForTeam(foundTeam, args.UserId):
 		return errResponsef("You aren't a team lead of %s, so you can't create channels that start with that name.", foundTeam.Name)
 	}
 

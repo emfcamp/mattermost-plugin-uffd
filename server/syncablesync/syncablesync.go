@@ -168,7 +168,11 @@ func (e *Engine) FullSync(ctx context.Context) error {
 				}
 			}
 		}
-		l.Infof("computed diff (%d adds, %d deletes, %d updates)", len(membersToAdd), len(membersToDelete), len(membersToUpdate))
+		if len(membersToAdd)+len(membersToDelete)+len(membersToUpdate) > 0 {
+			l.Infof("computed diff (%d adds, %d deletes, %d updates)", len(membersToAdd), len(membersToDelete), len(membersToUpdate))
+		} else {
+			l.Debugf("no-op diff completed")
+		}
 
 		var mergedErr error
 		if len(membersToAdd) > 0 {
@@ -189,7 +193,11 @@ func (e *Engine) FullSync(ctx context.Context) error {
 		if mergedErr != nil {
 			return fmt.Errorf("performing updates for %#v: %w", syncableTarget, mergedErr)
 		}
-		l.Infof("applied diff (%d adds, %d deletes, %d updates)", len(membersToAdd), len(membersToDelete), len(membersToUpdate))
+		if len(membersToAdd)+len(membersToDelete)+len(membersToUpdate) > 0 {
+			l.Infof("applied diff (%d adds, %d deletes, %d updates)", len(membersToAdd), len(membersToDelete), len(membersToUpdate))
+		} else {
+			l.Debugf("no-op diff completed")
+		}
 	}
 	return nil
 }
