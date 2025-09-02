@@ -301,7 +301,7 @@ func (m *Mattermost) FetchGroupsAndSyncables(ctx context.Context) ([]Group, erro
 				GrantsAdmin: true,
 			})
 			fallthrough
-		case "emf-all", "emf-offtopic":
+		case "emf-all": // no emf-offtopic here, we just let people autojoin that
 			allUsersSyncables = append(allUsersSyncables, Syncable{
 				Target: t,
 			})
