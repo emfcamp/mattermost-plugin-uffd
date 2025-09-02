@@ -178,7 +178,6 @@ func (m *Mattermost) FetchGroupsAndSyncables(ctx context.Context) ([]Group, erro
 	}
 	for _, ch := range allChannels {
 		chInfo := channelInfo[ch.Id]
-		l.WithField("channel", ch).WithField("channelInfo", chInfo).Info("channel")
 		if chInfo == nil {
 			continue
 		}
@@ -373,10 +372,6 @@ func (m *Mattermost) ensureCredentials(ctx context.Context) error {
 		ExpiresAt: now.Add(6 * time.Hour).UnixMilli(),
 	}
 	sess.GenerateCSRF()
-	// XXX
-	l := ctxlog.FromContext(ctx)
-	l.WithField("sess", sess).WithField("user", u).Info("creating session")
-	// XXX
 	sess, appErr := m.API.CreateSession(sess)
 	if appErr != nil {
 		return fmt.Errorf("CreateSession for system bot: %w", appErr)
