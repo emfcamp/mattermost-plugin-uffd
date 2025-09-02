@@ -305,6 +305,10 @@ func (m *Mattermost) FetchGroupsAndSyncables(ctx context.Context) ([]Group, erro
 			allUsersSyncables = append(allUsersSyncables, Syncable{
 				Target: t,
 			})
+		case "emf-leads":
+			leadSyncables = append(leadSyncables, Syncable{
+				Target: t,
+			})
 		}
 	}
 	groups = append(groups, Group{
