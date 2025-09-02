@@ -119,8 +119,14 @@ func (m *Mattermost) FetchGroupsAndSyncables(ctx context.Context) ([]Group, erro
 	if appErr != nil {
 		return nil, fmt.Errorf("fetching list of teams from Mattermost: %w", appErr)
 	}
-	if len(teams) != 1 {
-		return nil, fmt.Errorf("expected precisely 1 Mattermost team, found %d", len(teams))
+	var theTeam *model.Team
+	for _, team := range teams {
+		if team.Name == "emf" || team.Name == "emf-test" {
+			theTeam = team
+		}
+	}
+	if theTeam == nil {
+		return nil, fmt.Errorf("expected a team named emf or emf-test")
 	}
 	// For dumb reasons, getting the list of channels must be done using a bot account, because the plugin can only 'see' public channels.
 	if err := m.ensureCredentials(ctx); err != nil {
@@ -135,6 +141,9 @@ func (m *Mattermost) FetchGroupsAndSyncables(ctx context.Context) ([]Group, erro
 		etag = resp.Etag
 		var out []*model.Channel
 		for _, c := range cs {
+			if c.TeamId != theTeam.Id {
+				continue
+			}
 			out = append(out, &c.Channel)
 		}
 		return out, nil
@@ -191,7 +200,7 @@ func (m *Mattermost) FetchGroupsAndSyncables(ctx context.Context) ([]Group, erro
 		if !knownChannels.Contains(t.Name) {
 			// Create the default public channel for this team.
 			ch, appErr := m.API.CreateChannel(&model.Channel{
-				TeamId:      teams[0].Id,
+				TeamId:      theTeam.Id,
 				Type:        model.ChannelTypeOpen,
 				Name:        t.Name,
 				DisplayName: t.Name,
@@ -211,7 +220,7 @@ func (m *Mattermost) FetchGroupsAndSyncables(ctx context.Context) ([]Group, erro
 		if !knownChannels.Contains(privName) {
 			// Create the default public channel for this team.
 			ch, appErr := m.API.CreateChannel(&model.Channel{
-				TeamId:      teams[0].Id,
+				TeamId:      theTeam.Id,
 				Type:        model.ChannelTypePrivate,
 				Name:        privName,
 				DisplayName: privName,
@@ -276,12 +285,10 @@ func (m *Mattermost) FetchGroupsAndSyncables(ctx context.Context) ([]Group, erro
 	// Get team, and ensure all members are a member of it, and the emf-all/emf-announce/emf-offtopic channels.
 	var leadSyncables []Syncable
 	var allUsersSyncables []Syncable
-	for _, team := range teams {
-		allUsersSyncables = append(allUsersSyncables, Syncable{Target: SyncableTarget{
-			Type: mattermostSyncableTypeTeam,
-			ID:   team.Id,
-		}})
-	}
+	allUsersSyncables = append(allUsersSyncables, Syncable{Target: SyncableTarget{
+		Type: mattermostSyncableTypeTeam,
+		ID:   theTeam.Id,
+	}})
 	for _, ch := range allChannels {
 		t := SyncableTarget{
 			Type: mattermostSyncableTypeChannel,
