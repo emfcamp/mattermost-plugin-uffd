@@ -214,6 +214,10 @@ func (s *MattermostService) UpdateUsers(ctx context.Context, users []*User[strin
 			serviceUser.Nickname = u.DisplayName
 			propsUpdated = true
 		}
+		if serviceUser.FirstName != u.DisplayName {
+			serviceUser.FirstName = u.DisplayName
+			propsUpdated = true
+		}
 		if serviceUser.Props == nil {
 			serviceUser.Props = map[string]string{}
 		}
