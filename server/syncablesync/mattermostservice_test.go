@@ -294,7 +294,8 @@ var _ mattermostREST = ((*fakeMattermost)(nil))
 func TestFetchGroupsAndSyncables(t *testing.T) {
 	mm := &fakeMattermost{
 		teams: []*model.Team{{
-			Id: "emfcamp",
+			Id:   "emfcamp",
+			Name: "emf",
 		}},
 		channels: map[string]*model.Channel{
 			"foo": {
@@ -363,6 +364,7 @@ func TestFetchGroupsAndSyncables(t *testing.T) {
 		GroupStore: gs,
 
 		SystemAdminGroup: "admin",
+		ManagedTeam:      "emf",
 	}
 	got, err := m.FetchGroupsAndSyncables(context.Background())
 	if err != nil {

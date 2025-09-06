@@ -30,6 +30,7 @@ type Mattermost struct {
 	sessionExpiresAt time.Time
 
 	SystemAdminGroup string
+	ManagedTeam      string
 }
 
 var _ ServiceAPI = ((*Mattermost)(nil))
@@ -115,18 +116,22 @@ func (m *Mattermost) FetchGroupsAndSyncables(ctx context.Context) ([]Group, erro
 		})
 	}
 
+	if m.ManagedTeam == "" {
+		return nil, fmt.Errorf("ACL syncing is disabled - ManagedTeam configuration key is empty")
+	}
+
 	teams, appErr := m.API.GetTeams()
 	if appErr != nil {
 		return nil, fmt.Errorf("fetching list of teams from Mattermost: %w", appErr)
 	}
 	var theTeam *model.Team
 	for _, team := range teams {
-		if team.Name == "emf" || team.Name == "emf-test" {
+		if team.Name == m.ManagedTeam {
 			theTeam = team
 		}
 	}
 	if theTeam == nil {
-		return nil, fmt.Errorf("expected a team named emf or emf-test")
+		return nil, fmt.Errorf("expected a team named %q", m.ManagedTeam)
 	}
 	// For dumb reasons, getting the list of channels must be done using a bot account, because the plugin can only 'see' public channels.
 	if err := m.ensureCredentials(ctx); err != nil {

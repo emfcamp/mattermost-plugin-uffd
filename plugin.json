@@ -39,6 +39,14 @@
 			"default": ""
 		},
 		{
+			"key": "ManagedTeam",
+			"display_name": "Name of team that is managed by the plugin",
+			"type": "text",
+			"help_text": "The URL slug name of the team that will be managed by this plugin.",
+			"placeholder": "emf",
+			"default": "emf"
+		},
+		{
 			"key": "SyncInterval",
 			"display_name": "Sync interval",
 			"type": "text",

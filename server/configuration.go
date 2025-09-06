@@ -48,6 +48,9 @@ type configuration struct {
 	// SystemAdminGroup defines the name of a group that will be synced to the system_admin role.
 	SystemAdminGroup string
 
+	// ManagedTeam is the slug name of the team that will be managed by the plugin.
+	ManagedTeam string
+
 	// SyncInterval is the interval at which groups will be synced. Note
 	// that syncing can also be triggered by hitting the "sync" endpoint.
 	SyncInterval configurationDuration

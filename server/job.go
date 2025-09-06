@@ -68,6 +68,7 @@ func (p *Plugin) runSync(ctx context.Context, trigger string) error {
 				API: p.API,
 			},
 			SystemAdminGroup: cfg.SystemAdminGroup,
+			ManagedTeam:      cfg.ManagedTeam,
 		},
 	}
 	if err := ss.FullSync(ctx); err != nil {
