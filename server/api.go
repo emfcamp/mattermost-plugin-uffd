@@ -20,6 +20,7 @@ func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Req
 	apiRouter.Use(p.MattermostAuthorizationRequired)
 	// No particular permissions are required to force a sync (at the moment...)
 	apiRouter.HandleFunc("/sync", p.HTTPSyncNow).Methods(http.MethodPost)
+	p.registerDialogHandlers(apiRouter.PathPrefix("/dialog").Subrouter())
 
 	router.ServeHTTP(w, r)
 }

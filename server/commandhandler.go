@@ -15,14 +15,19 @@ import (
 )
 
 const (
-	renameTrigger = "rename"
-	createTrigger = "create"
+	renameTrigger     = "rename"
+	createTrigger     = "create"
+	addTeamTrigger    = "addteam"
+	removeTeamTrigger = "removeteam"
+	addUserTrigger    = "adduser"
+	removeUserTrigger = "removeuser"
 )
 
 type CommandHandler struct {
 	// client is the Mattermost server API client.
 	client *pluginapi.Client
 	api    plugin.API
+	plugin *Plugin
 
 	runSync func(ctx context.Context, trigger string) error
 }
@@ -31,6 +36,7 @@ func NewCommandHandler(p *Plugin) (*CommandHandler, error) {
 	c := &CommandHandler{
 		client:  pluginapi.NewClient(p.API, p.Driver),
 		api:     p.API,
+		plugin:  p,
 		runSync: p.runSync,
 	}
 
@@ -52,7 +58,7 @@ func NewCommandHandler(p *Plugin) (*CommandHandler, error) {
 	{
 		createACD := model.NewAutocompleteData(createTrigger, "[name] [type]", "Create a new public/private channel")
 		createACD.AddTextArgument("[name]", "[text]", "")
-		createACD.AddTextArgument("[type]", "[public/private/unmanaged-private]", "unmanaged-private channels do not automatically add team members")
+		createACD.AddTextArgument("[type]", "[public/private]", "")
 		if err := c.client.SlashCommand.Register(&model.Command{
 			Trigger:          createTrigger,
 			DisplayName:      "create",
@@ -62,6 +68,60 @@ func NewCommandHandler(p *Plugin) (*CommandHandler, error) {
 			AutocompleteData: createACD,
 		}); err != nil {
 			return nil, fmt.Errorf("creating /%s: %w", createTrigger, err)
+		}
+	}
+
+	{
+		addTeamACD := model.NewAutocompleteData(addTeamTrigger, "", "Add team to the current channel")
+		if err := c.client.SlashCommand.Register(&model.Command{
+			Trigger:          addTeamTrigger,
+			DisplayName:      "addTeam",
+			AutoComplete:     true,
+			AutoCompleteDesc: "Add team to the current channel",
+			AutoCompleteHint: "",
+			AutocompleteData: addTeamACD,
+		}); err != nil {
+			return nil, fmt.Errorf("creating /%s: %w", addTeamTrigger, err)
+		}
+	}
+	{
+		removeTeamACD := model.NewAutocompleteData(removeTeamTrigger, "", "Remove team from the current channel")
+		if err := c.client.SlashCommand.Register(&model.Command{
+			Trigger:          removeTeamTrigger,
+			DisplayName:      "removeTeam",
+			AutoComplete:     true,
+			AutoCompleteDesc: "Remove team from the current channel",
+			AutoCompleteHint: "",
+			AutocompleteData: removeTeamACD,
+		}); err != nil {
+			return nil, fmt.Errorf("creating /%s: %w", removeTeamTrigger, err)
+		}
+	}
+
+	{
+		addUserACD := model.NewAutocompleteData(addUserTrigger, "", "Add user to the current channel")
+		if err := c.client.SlashCommand.Register(&model.Command{
+			Trigger:          addUserTrigger,
+			DisplayName:      "addUser",
+			AutoComplete:     true,
+			AutoCompleteDesc: "Add user to the current channel",
+			AutoCompleteHint: "",
+			AutocompleteData: addUserACD,
+		}); err != nil {
+			return nil, fmt.Errorf("creating /%s: %w", addUserTrigger, err)
+		}
+	}
+	{
+		removeUserACD := model.NewAutocompleteData(removeUserTrigger, "", "Remove user from the current channel")
+		if err := c.client.SlashCommand.Register(&model.Command{
+			Trigger:          removeUserTrigger,
+			DisplayName:      "removeUser",
+			AutoComplete:     true,
+			AutoCompleteDesc: "Remove user from the current channel",
+			AutoCompleteHint: "",
+			AutocompleteData: removeUserACD,
+		}); err != nil {
+			return nil, fmt.Errorf("creating /%s: %w", removeUserTrigger, err)
 		}
 	}
 
@@ -78,6 +138,12 @@ func (h *CommandHandler) ExecuteCommand(c *plugin.Context, args *model.CommandAr
 		return h.executeRename(ctx, c, args)
 	case createTrigger:
 		return h.executeCreate(ctx, c, args)
+	case addTeamTrigger:
+		return h.executeAddTeam(ctx, c, args)
+	case addUserTrigger:
+		return h.executeAddUser(ctx, c, args)
+	case removeTeamTrigger, removeUserTrigger:
+		return h.executeRemoveMember(ctx, c, args)
 	default:
 		return &model.CommandResponse{
 			ResponseType: model.CommandResponseTypeEphemeral,
@@ -203,8 +269,8 @@ func (h *CommandHandler) executeCreate(ctx context.Context, c *plugin.Context, a
 	}
 
 	newType := bits[2]
-	if !map[string]bool{"public": true, "private": true, "unmanaged-private": true}[newType] {
-		return errResponsef("Channel type should be one of public, private, or unmanaged-private")
+	if !map[string]bool{"public": true, "private": true}[newType] {
+		return errResponsef("Channel type should be one of public or private")
 	}
 
 	ds := &datastore.MattermostDataStore{API: h.api}
@@ -236,7 +302,14 @@ func (h *CommandHandler) executeCreate(ctx context.Context, c *plugin.Context, a
 	chInfo := &datastore.ChannelInfo{
 		ID:                  ch.Id,
 		Name:                newName,
-		MembershipUnmanaged: newType == "unmanaged-private",
+		MembershipUnmanaged: false,
+		Admins: []datastore.ACLElement{{
+			Type:  datastore.ACLElementTypeTeamLead,
+			Value: foundTeam.Name,
+		}, {
+			Type:  datastore.ACLElementTypeTeamMember,
+			Value: foundTeam.Name,
+		}},
 	}
 	if err := ds.SaveChannel(ctx, chInfo); err != nil {
 		return errResponsef("An error occurred saving additional channel information: %v", err)
@@ -244,6 +317,92 @@ func (h *CommandHandler) executeCreate(ctx context.Context, c *plugin.Context, a
 
 	if err := h.runSync(ctx, "channel-create"); err != nil {
 		return errResponsef("An error occurred syncing initial membership information: %v", err)
+	}
+
+	return &model.CommandResponse{}, nil
+}
+
+type permissionError string
+
+func (e permissionError) Error() string { return string(e) }
+
+func (p *Plugin) fetchChannelAndCheckPermission(userID, channelID string) (*model.Channel, *datastore.ChannelInfo, error) {
+	ch, err := p.client.Channel.Get(channelID)
+	if err != nil {
+		return nil, nil, permissionError("Your current channel is invalid.")
+	}
+
+	permissionRequired := model.PermissionManagePublicChannelProperties
+	switch ch.Type {
+	case model.ChannelTypeOpen:
+		// Default.
+	case model.ChannelTypePrivate:
+		permissionRequired = model.PermissionManagePrivateChannelProperties
+	default:
+		return nil, nil, permissionError("You must be in a public/private channel to use this command.")
+	}
+	if !p.client.User.HasPermissionToChannel(userID, channelID, permissionRequired) {
+		return nil, nil, permissionError("You don't have permission to manage this channel.")
+	}
+
+	chInfo, ok, err := p.datastore().LoadChannel(context.Background(), channelID)
+	if err != nil {
+		return nil, nil, permissionError(fmt.Sprintf("Loading channel plugin metadata failed: %v", err))
+	} else if !ok {
+		return ch, nil, nil
+	}
+	return ch, chInfo, nil
+}
+
+func (h *CommandHandler) executeAddTeam(ctx context.Context, c *plugin.Context, args *model.CommandArgs) (*model.CommandResponse, *model.AppError) {
+	bits := strings.Fields(args.Command)
+	if len(bits) != 1 {
+		return errResponsef("Command syntax is /%s", addTeamTrigger)
+	}
+
+	ch, chInfo, err := h.plugin.fetchChannelAndCheckPermission(args.UserId, args.ChannelId)
+	if err != nil {
+		return errResponsef("%s", err)
+	}
+
+	if err := h.plugin.openAddTeamDialog(ctx, args.TriggerId, ch, chInfo); err != nil {
+		return errResponsef("%s", err)
+	}
+
+	return &model.CommandResponse{}, nil
+}
+
+func (h *CommandHandler) executeRemoveMember(ctx context.Context, c *plugin.Context, args *model.CommandArgs) (*model.CommandResponse, *model.AppError) {
+	bits := strings.Fields(args.Command)
+	if len(bits) != 1 {
+		return errResponsef("Command syntax is /%s", bits[0])
+	}
+
+	ch, chInfo, err := h.plugin.fetchChannelAndCheckPermission(args.UserId, args.ChannelId)
+	if err != nil {
+		return errResponsef("%s", err)
+	}
+
+	if err := h.plugin.openRemoveMemberDialog(ctx, args.TriggerId, ch, chInfo); err != nil {
+		return errResponsef("%s", err)
+	}
+
+	return &model.CommandResponse{}, nil
+}
+
+func (h *CommandHandler) executeAddUser(ctx context.Context, c *plugin.Context, args *model.CommandArgs) (*model.CommandResponse, *model.AppError) {
+	bits := strings.Fields(args.Command)
+	if len(bits) != 1 {
+		return errResponsef("Command syntax is /%s", addUserTrigger)
+	}
+
+	ch, chInfo, err := h.plugin.fetchChannelAndCheckPermission(args.UserId, args.ChannelId)
+	if err != nil {
+		return errResponsef("%s", err)
+	}
+
+	if err := h.plugin.openAddUserDialog(ctx, args.TriggerId, ch, chInfo); err != nil {
+		return errResponsef("%s", err)
 	}
 
 	return &model.CommandResponse{}, nil

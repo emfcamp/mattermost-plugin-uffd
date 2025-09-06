@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lukegb/mattermost-plugin-uffd/server/datastore"
 	"github.com/lukegb/mattermost-plugin-uffd/server/syncengine"
 	"github.com/lukegb/mattermost-plugin-uffd/server/uffd"
 
@@ -37,6 +38,12 @@ type Plugin struct {
 	// configuration is the active plugin configuration. Consult getConfiguration and
 	// setConfiguration for usage.
 	configuration *configuration
+}
+
+func (p *Plugin) datastore() *datastore.MattermostDataStore {
+	return &datastore.MattermostDataStore{
+		API: p.API,
+	}
 }
 
 func (p *Plugin) rescheduleSync() error {

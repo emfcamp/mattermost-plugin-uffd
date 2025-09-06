@@ -164,7 +164,8 @@ func (m *Mattermost) FetchGroupsAndSyncables(ctx context.Context) ([]Group, erro
 
 	// Ensure that we have $TEAM and $TEAM-private channels for all teams.
 	channelInfo := map[string]*datastore.ChannelInfo{}
-	knownChannels := stringset.New()
+	knownChannels := map[string]string{}
+	defaultedChannels := stringset.New()
 	l := ctxlog.FromContext(ctx)
 	for _, ch := range allChannels {
 		chInfo, ok, err := m.GroupStore.LoadChannel(ctx, ch.Id)
@@ -174,14 +175,15 @@ func (m *Mattermost) FetchGroupsAndSyncables(ctx context.Context) ([]Group, erro
 			chInfo = &datastore.ChannelInfo{
 				ID:                  ch.Id,
 				Name:                ch.Name,
-				MembershipUnmanaged: false,
+				MembershipUnmanaged: true,
 			}
 			if err := m.GroupStore.SaveChannel(ctx, chInfo); err != nil {
 				l.WithError(err).WithField("channelInfo", chInfo).Error("failed to save additional channel info")
 			}
+			defaultedChannels.Add(ch.Id)
 		}
 		channelInfo[ch.Id] = chInfo
-		knownChannels.Add(ch.Name)
+		knownChannels[ch.Name] = ch.Id
 	}
 	for _, ch := range allChannels {
 		chInfo := channelInfo[ch.Id]
@@ -203,7 +205,15 @@ func (m *Mattermost) FetchGroupsAndSyncables(ctx context.Context) ([]Group, erro
 		}
 	}
 	for _, t := range emfTeams {
-		if !knownChannels.Contains(t.Name) {
+		membersACL := []datastore.ACLElement{{
+			Type:  datastore.ACLElementTypeTeamMember,
+			Value: t.Name,
+		}}
+		adminsACL := []datastore.ACLElement{{
+			Type:  datastore.ACLElementTypeTeamLead,
+			Value: t.Name,
+		}}
+		if _, ok := knownChannels[t.Name]; !ok {
 			// Create the default public channel for this team.
 			ch, appErr := m.API.CreateChannel(&model.Channel{
 				TeamId:      theTeam.Id,
@@ -215,16 +225,15 @@ func (m *Mattermost) FetchGroupsAndSyncables(ctx context.Context) ([]Group, erro
 				return nil, fmt.Errorf("creating default public channel for team %v: %w", t.Name, appErr)
 			}
 			allChannels = append(allChannels, ch)
-			if err := m.GroupStore.SaveChannel(ctx, &datastore.ChannelInfo{
-				ID:                  ch.Id,
-				Name:                t.Name,
-				MembershipUnmanaged: false,
-			}); err != nil {
-				l.WithError(err).WithField("channel_id", ch.Id).WithField("channel_name", t.Name).Error("Failed to create default public channel metadata")
+			knownChannels[t.Name] = ch.Id
+			defaultedChannels.Add(ch.Id)
+			channelInfo[ch.Id] = &datastore.ChannelInfo{
+				ID:   ch.Id,
+				Name: ch.Name,
 			}
 		}
 		privName := t.Name + "-private"
-		if !knownChannels.Contains(privName) {
+		if _, ok := knownChannels[privName]; !ok {
 			// Create the default private channel for this team.
 			ch, appErr := m.API.CreateChannel(&model.Channel{
 				TeamId:      theTeam.Id,
@@ -236,13 +245,47 @@ func (m *Mattermost) FetchGroupsAndSyncables(ctx context.Context) ([]Group, erro
 				return nil, fmt.Errorf("creating default private channel %v for team %v: %w", privName, t.Name, appErr)
 			}
 			allChannels = append(allChannels, ch)
-			if err := m.GroupStore.SaveChannel(ctx, &datastore.ChannelInfo{
-				ID:                  ch.Id,
-				Name:                privName,
-				MembershipUnmanaged: false,
-			}); err != nil {
-				l.WithError(err).WithField("channel_id", ch.Id).WithField("channel_name", t.Name).Error("Failed to create default private channel metadata")
+			knownChannels[t.Name] = ch.Id
+			defaultedChannels.Add(ch.Id)
+			channelInfo[ch.Id] = &datastore.ChannelInfo{
+				ID:   ch.Id,
+				Name: ch.Name,
 			}
+		}
+
+		for _, ch := range allChannels {
+			if ch.Name != t.Name && !strings.HasPrefix(ch.Name, t.Name+"-") {
+				continue
+			}
+			// This is one of this team's channels.
+			if !defaultedChannels.Contains(ch.Id) {
+				// If this wasn't defaulted, we have nothing to do.
+				continue
+			}
+			chInfo := channelInfo[ch.Id]
+			chInfo.MembershipUnmanaged = ch.IsOpen()
+			chInfo.Admins = adminsACL
+			chInfo.Members = membersACL
+			if err := m.GroupStore.SaveChannel(ctx, chInfo); err != nil {
+				l.WithError(err).WithField("channel_id", ch.Id).WithField("channel_name", ch.Name).Error("Failed to create default team channel metadata")
+			}
+		}
+	}
+
+	indexedMembers := make(map[datastore.ACLElement]map[bool][]*datastore.ChannelInfo)
+	for _, ch := range allChannels {
+		chInfo := channelInfo[ch.Id]
+		for _, mem := range chInfo.Members {
+			if _, ok := indexedMembers[mem]; !ok {
+				indexedMembers[mem] = make(map[bool][]*datastore.ChannelInfo)
+			}
+			indexedMembers[mem][false] = append(indexedMembers[mem][false], chInfo)
+		}
+		for _, mem := range chInfo.Admins {
+			if _, ok := indexedMembers[mem]; !ok {
+				indexedMembers[mem] = make(map[bool][]*datastore.ChannelInfo)
+			}
+			indexedMembers[mem][true] = append(indexedMembers[mem][true], chInfo)
 		}
 	}
 
@@ -251,26 +294,28 @@ func (m *Mattermost) FetchGroupsAndSyncables(ctx context.Context) ([]Group, erro
 		seenUsers.Add(emfTeam.Leads...)
 		seenUsers.Add(emfTeam.Members...)
 
-		teamPrefix := emfTeam.Name + "-"
 		var leadSyncables []Syncable
 		var memberSyncables []Syncable
-		for _, ch := range allChannels {
-			chInfo := channelInfo[ch.Id]
-			if ch.Name == emfTeam.Name || strings.HasPrefix(ch.Name, teamPrefix) {
-				t := SyncableTarget{
-					Type: mattermostSyncableTypeChannel,
-					ID:   ch.Id,
-				}
+		for grantsAdmin, mems := range indexedMembers[datastore.ACLElement{Type: datastore.ACLElementTypeTeamLead, Value: emfTeam.Name}] {
+			for _, mem := range mems {
 				leadSyncables = append(leadSyncables, Syncable{
-					Target:      t,
-					GrantsAdmin: true,
+					Target: SyncableTarget{
+						Type: mattermostSyncableTypeChannel,
+						ID:   mem.ID,
+					},
+					GrantsAdmin: grantsAdmin,
 				})
-				if !chInfo.MembershipUnmanaged {
-					memberSyncables = append(memberSyncables, Syncable{
-						Target:      t,
-						GrantsAdmin: false,
-					})
-				}
+			}
+		}
+		for grantsAdmin, mems := range indexedMembers[datastore.ACLElement{Type: datastore.ACLElementTypeTeamMember, Value: emfTeam.Name}] {
+			for _, mem := range mems {
+				memberSyncables = append(memberSyncables, Syncable{
+					Target: SyncableTarget{
+						Type: mattermostSyncableTypeChannel,
+						ID:   mem.ID,
+					},
+					GrantsAdmin: grantsAdmin,
+				})
 			}
 		}
 
@@ -288,6 +333,50 @@ func (m *Mattermost) FetchGroupsAndSyncables(ctx context.Context) ([]Group, erro
 			Members:   emfTeam.Members,
 			Syncables: memberSyncables,
 		})
+	}
+
+	for aclEl, adminToChInfos := range indexedMembers {
+		if aclEl.Type == datastore.ACLElementTypeTeamLead || aclEl.Type == datastore.ACLElementTypeTeamMember {
+			continue
+		}
+
+		var syncables []Syncable
+		for grantsAdmin, chInfos := range adminToChInfos {
+			for _, chInfo := range chInfos {
+				syncables = append(syncables, Syncable{
+					Target: SyncableTarget{
+						Type: mattermostSyncableTypeChannel,
+						ID:   chInfo.ID,
+					},
+					GrantsAdmin: grantsAdmin,
+				})
+			}
+		}
+
+		switch aclEl.Type {
+		case datastore.ACLElementTypeUser:
+			groups = append(groups, Group{
+				ID:        fmt.Sprintf("user:%s", aclEl.Value),
+				Name:      fmt.Sprintf("user:%s", aclEl.Value),
+				Members:   []string{aclEl.Value},
+				Syncables: syncables,
+			})
+		case datastore.ACLElementTypeGroup:
+			sg, ok, err := m.GroupStore.LoadGroup(ctx, aclEl.Value)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load group %q: %w", aclEl.Value, err)
+			} else if !ok {
+				return nil, fmt.Errorf("group in ACL element %q but no group by that name in the KV store - does it actually exist?", aclEl.Value)
+			}
+
+			seenUsers.Add(sg.MemberUserIDs...)
+			groups = append(groups, Group{
+				ID:        fmt.Sprintf("group:%s", aclEl.Value),
+				Name:      aclEl.Value,
+				Members:   sg.MemberUserIDs,
+				Syncables: syncables,
+			})
+		}
 	}
 
 	// Get team, and ensure all members are a member of it, and the emf-all/emf-announce/emf-offtopic channels.

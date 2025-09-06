@@ -113,11 +113,11 @@ func unpersistList[T any](ctx context.Context, api MattermostPluginAPI, prefix s
 	return out, nil
 }
 
-func persistItem[T any](ctx context.Context, api MattermostPluginAPI, prefix string, name string, item T) error {
+func persistItem[T any](_ context.Context, api MattermostPluginAPI, prefix string, name string, item T) error {
 	return kvSet[T](api, fmt.Sprintf("%s:%s", prefix, name), item)
 }
 
-func unpersistItem[T any](ctx context.Context, api MattermostPluginAPI, prefix string, name string) (T, bool, error) {
+func unpersistItem[T any](_ context.Context, api MattermostPluginAPI, prefix string, name string) (T, bool, error) {
 	return kvGet[T](api, fmt.Sprintf("%s:%s", prefix, name))
 }
 
@@ -155,11 +155,28 @@ func (s *MattermostDataStore) LoadTeam(ctx context.Context, name string) (syncen
 	return unpersistItem[syncengine.Team](ctx, s.API, "teams", name)
 }
 
+type ACLElementType string
+
+const (
+	ACLElementTypeTeamMember ACLElementType = "team_member"
+	ACLElementTypeTeamLead   ACLElementType = "team_lead"
+	ACLElementTypeGroup      ACLElementType = "group"
+	ACLElementTypeUser       ACLElementType = "user"
+)
+
+type ACLElement struct {
+	Type  ACLElementType
+	Value string
+}
+
 type ChannelInfo struct {
 	ID string
 
 	Name                string
 	MembershipUnmanaged bool // disables membership management for this channel
+
+	Members []ACLElement
+	Admins  []ACLElement
 }
 
 // SaveChannel saves the channel to the KV store.

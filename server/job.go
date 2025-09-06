@@ -62,11 +62,9 @@ func (p *Plugin) runSync(ctx context.Context, trigger string) error {
 	}
 	ss := &syncablesync.Engine{
 		API: &syncablesync.Mattermost{
-			API:  p.API,
-			REST: model.NewAPIv4Client(*siteURL),
-			GroupStore: &datastore.MattermostDataStore{
-				API: p.API,
-			},
+			API:              p.API,
+			REST:             model.NewAPIv4Client(*siteURL),
+			GroupStore:       p.datastore(),
 			SystemAdminGroup: cfg.SystemAdminGroup,
 			ManagedTeam:      cfg.ManagedTeam,
 		},
