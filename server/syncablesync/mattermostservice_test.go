@@ -409,7 +409,6 @@ func TestFetchGroupsAndSyncables(t *testing.T) {
 			{Target: SyncableTarget{Type: mattermostSyncableTypeTeam, ID: "emfcamp"}},
 			{Target: SyncableTarget{Type: mattermostSyncableTypeChannel, ID: "emf-all"}},
 			{Target: SyncableTarget{Type: mattermostSyncableTypeChannel, ID: "emf-announce"}},
-			{Target: SyncableTarget{Type: mattermostSyncableTypeChannel, ID: "emf-offtopic"}},
 		},
 	}, {
 		ID:      "all-leads",

@@ -118,6 +118,8 @@ func (f *fakeMattermostPluginAPI) UpdateUser(in *model.User) (*model.User, *mode
 			u.Email = in.Email
 			u.EmailVerified = in.EmailVerified
 			u.Nickname = in.Nickname
+			u.FirstName = in.FirstName
+			u.LastName = in.LastName
 			u.Props = in.Props
 			return u.DeepCopy(), nil
 		}
@@ -397,6 +399,7 @@ func TestMattermostUpdateUsers(t *testing.T) {
 			Id:            "id::user::untoucheduser",
 			Username:      "untoucheduser",
 			Nickname:      "Untouched User",
+			FirstName:     "Untouched User",
 			AuthService:   "openid",
 			Email:         "untoucheduser@example.bin",
 			EmailVerified: true,
@@ -451,6 +454,7 @@ func TestMattermostUpdateUsers(t *testing.T) {
 			Id:            "id::user::testuser",
 			Username:      "nowdisabled",
 			Nickname:      "New Display Name",
+			FirstName:     "New Display Name",
 			AuthService:   "openid",
 			Email:         "newemail@example.bin",
 			EmailVerified: true,
@@ -474,6 +478,7 @@ func TestMattermostUpdateUsers(t *testing.T) {
 			Id:            "id::user::testuser2",
 			Username:      "newuser2",
 			Nickname:      "New Display Name 2",
+			FirstName:     "New Display Name 2",
 			AuthService:   "openid",
 			Email:         "newemail2@example.bin",
 			EmailVerified: true,
@@ -496,6 +501,7 @@ func TestMattermostUpdateUsers(t *testing.T) {
 			Id:            "id::user::disableduser",
 			Username:      "disableduser",
 			Nickname:      "Reenabled User",
+			FirstName:     "Reenabled User",
 			AuthService:   "openid",
 			Email:         "disableduser@example.bin",
 			EmailVerified: true,
@@ -518,6 +524,7 @@ func TestMattermostUpdateUsers(t *testing.T) {
 			Id:            "id::user::untoucheduser",
 			Username:      "untoucheduser",
 			Nickname:      "Untouched User",
+			FirstName:     "Untouched User",
 			AuthService:   "openid",
 			Email:         "untoucheduser@example.bin",
 			EmailVerified: true,
