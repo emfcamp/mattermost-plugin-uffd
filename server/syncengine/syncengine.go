@@ -195,12 +195,16 @@ func (s *SyncEngine) FullSyncGroups(ctx context.Context, c *Cache, out *Outcome)
 	}
 	var teams []Team
 	for _, teamData := range teamDatas {
+		if teamData.leadsGroup == nil && teamData.membersGroup == nil {
+			return fmt.Errorf("team %v somehow missing both a members and leads group?", teamData.name)
+		}
 		if teamData.leadsGroup == nil {
 			l.WithField("team", teamData.name).Warningf("team %s missing a leads group; using members group as leads group", teamData.name)
 			teamData.leadsGroup = teamData.membersGroup
 		}
 		if teamData.membersGroup == nil {
-			return fmt.Errorf("team %v missing a members group", teamData.name)
+			l.WithField("team", teamData.name).Warningf("team %s missing a members group; using leads group as members group", teamData.name)
+			teamData.membersGroup = teamData.leadsGroup
 		}
 		teams = append(teams, Team{
 			Name:    teamData.name,
