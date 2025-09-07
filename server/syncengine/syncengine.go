@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"regexp"
 
+	"github.com/lukegb/mattermost-plugin-uffd/server/ctxlog"
 	"github.com/lukegb/mattermost-plugin-uffd/server/stringset"
 )
 
@@ -116,6 +117,8 @@ func (s *SyncEngine) FullSyncUsers(ctx context.Context, c *Cache, out *Outcome) 
 }
 
 func (s *SyncEngine) FullSyncGroups(ctx context.Context, c *Cache, out *Outcome) error {
+	l := ctxlog.FromContext(ctx)
+
 	idpGroups, err := s.IDP.FetchGroups(ctx)
 	if err != nil {
 		return err
@@ -193,7 +196,8 @@ func (s *SyncEngine) FullSyncGroups(ctx context.Context, c *Cache, out *Outcome)
 	var teams []Team
 	for _, teamData := range teamDatas {
 		if teamData.leadsGroup == nil {
-			return fmt.Errorf("team %v missing a leads group", teamData.name)
+			l.WithField("team", teamData.name).Warningf("team %s missing a leads group; using members group as leads group", teamData.name)
+			teamData.leadsGroup = teamData.membersGroup
 		}
 		if teamData.membersGroup == nil {
 			return fmt.Errorf("team %v missing a members group", teamData.name)
