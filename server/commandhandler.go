@@ -327,6 +327,8 @@ type permissionError string
 func (e permissionError) Error() string { return string(e) }
 
 func (p *Plugin) fetchChannelAndCheckPermission(userID, channelID string) (*model.Channel, *datastore.ChannelInfo, error) {
+	ctx := context.TODO()
+
 	ch, err := p.client.Channel.Get(channelID)
 	if err != nil {
 		return nil, nil, permissionError("Your current channel is invalid.")
@@ -345,11 +347,19 @@ func (p *Plugin) fetchChannelAndCheckPermission(userID, channelID string) (*mode
 		return nil, nil, permissionError("You don't have permission to manage this channel.")
 	}
 
-	chInfo, ok, err := p.datastore().LoadChannel(context.Background(), channelID)
+	chInfo, ok, err := p.datastore().LoadChannel(ctx, channelID)
 	if err != nil {
 		return nil, nil, permissionError(fmt.Sprintf("Loading channel plugin metadata failed: %v", err))
 	} else if !ok {
-		return ch, nil, nil
+		// Default some channel info to avoid mystery crashing.
+		chInfo = &datastore.ChannelInfo{
+			ID:                  ch.Id,
+			Name:                ch.Name,
+			MembershipUnmanaged: true,
+		}
+		if err := p.datastore().SaveChannel(ctx, chInfo); err != nil {
+			return nil, nil, permissionError(fmt.Sprintf("Setting up default channel metadata: %v", err))
+		}
 	}
 	return ch, chInfo, nil
 }
