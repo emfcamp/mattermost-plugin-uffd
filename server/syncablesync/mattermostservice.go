@@ -205,6 +205,12 @@ func (m *Mattermost) FetchGroupsAndSyncables(ctx context.Context) ([]Group, erro
 		}
 	}
 	for _, t := range emfTeams {
+		if t.Name == "admin" {
+			// Skip team_admin, since that's just leads, and we'll deal with them separately.
+			// We don't want them to get auto-created channels.
+			continue
+		}
+
 		membersACL := []datastore.ACLElement{{
 			Type:  datastore.ACLElementTypeTeamMember,
 			Value: t.Name,
@@ -321,6 +327,9 @@ func (m *Mattermost) FetchGroupsAndSyncables(ctx context.Context) ([]Group, erro
 
 		id := "team-" + emfTeam.Name
 		allLeads.Add(emfTeam.Leads...)
+		if emfTeam.Name == "admin" {
+			allLeads.Add(emfTeam.Members...)
+		}
 		groups = append(groups, Group{
 			ID:        id + "-leads",
 			Name:      id + "-leads",
@@ -400,6 +409,10 @@ func (m *Mattermost) FetchGroupsAndSyncables(ctx context.Context) ([]Group, erro
 			fallthrough
 		case "emf-all": // no emf-offtopic here, we just let people autojoin that
 			allUsersSyncables = append(allUsersSyncables, Syncable{
+				Target: t,
+			})
+		case "emf-leads":
+			leadSyncables = append(leadSyncables, Syncable{
 				Target: t,
 			})
 		}
