@@ -13,12 +13,14 @@ import (
 	"slices"
 
 	"github.com/lukegb/mattermost-plugin-uffd/server/ctxlog"
+	"github.com/lukegb/mattermost-plugin-uffd/server/stringset"
 )
 
 type ServiceAPI interface {
 	SortSyncableTargets([]SyncableTarget)
 	SyncableHandlers() map[SyncableType]SyncableHandler
 	FetchGroupsAndSyncables(context.Context) ([]Group, error)
+	UnremovableUserIDs(context.Context) ([]string, error)
 }
 
 type Engine struct {
@@ -89,7 +91,7 @@ func (e *Engine) FullSync(ctx context.Context) error {
 
 	groups, err := e.API.FetchGroupsAndSyncables(ctx)
 	if err != nil {
-		return fmt.Errorf("fetching list of groups to sync: %v", err)
+		return fmt.Errorf("fetching list of groups to sync: %w", err)
 	}
 	l.WithField("groups", groups).Debug("found groups")
 
@@ -101,6 +103,13 @@ func (e *Engine) FullSync(ctx context.Context) error {
 			syncablesToGroups[syncable.Target] = append(syncablesToGroups[syncable.Target], group)
 		}
 	}
+
+	// Users which should not be removed from channels that they 'shouldn't be in'.
+	unremovableUsersList, err := e.API.UnremovableUserIDs(ctx)
+	if err != nil {
+		return fmt.Errorf("fetching list of 'unremovable' user IDs: %w", err)
+	}
+	unremovableUsers := stringset.FromSlice(unremovableUsersList)
 
 	sortedSyncableTarget := slices.Collect(maps.Keys(syncablesToGroups))
 	e.API.SortSyncableTargets(sortedSyncableTarget)
@@ -152,7 +161,12 @@ func (e *Engine) FullSync(ctx context.Context) error {
 		if !addOnly {
 			for uid, gotRM := range gotRosterMap {
 				if _, ok := wantRosterMap[uid]; !ok {
-					membersToDelete = append(membersToDelete, gotRM)
+					if unremovableUsers.Contains(uid) {
+						gotRM.IsAdmin = false
+						membersToUpdate = append(membersToUpdate, gotRM)
+					} else {
+						membersToDelete = append(membersToDelete, gotRM)
+					}
 				}
 			}
 		} else {

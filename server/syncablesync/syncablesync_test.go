@@ -15,6 +15,7 @@ const dummySyncableType = SyncableType("flarp")
 type dummyService struct {
 	groups          []Group
 	syncableMembers map[SyncableTarget][]RosterMember
+	unremovable     []string
 }
 
 var _ ServiceAPI = ((*dummyService)(nil))
@@ -29,6 +30,10 @@ func (s *dummyService) SyncableHandlers() map[SyncableType]SyncableHandler {
 
 func (s *dummyService) FetchGroupsAndSyncables(context.Context) ([]Group, error) {
 	return s.groups, nil
+}
+
+func (s *dummyService) UnremovableUserIDs(context.Context) ([]string, error) {
+	return s.unremovable, nil
 }
 
 type dummyServiceHandler struct {
@@ -199,6 +204,34 @@ func TestFullSync(t *testing.T) {
 				ID:      "group",
 				Name:    "group name",
 				Members: []string{"user1", "user2"},
+				Syncables: []Syncable{{
+					Target: dummyST,
+				}},
+			}},
+			syncableMembers: map[SyncableTarget][]RosterMember{
+				dummyST: {{
+					UserID:  "user1",
+					IsAdmin: true,
+				}, {
+					UserID: "user2",
+				}},
+			},
+		},
+		wantSyncableMembers: map[SyncableTarget][]RosterMember{
+			dummyST: {{
+				UserID: "user1",
+			}, {
+				UserID: "user2",
+			}},
+		},
+	}, {
+		name: "doesn't remove 'unremovable' members (but does demote them)",
+		s: &dummyService{
+			unremovable: []string{"user1", "user2"},
+			groups: []Group{{
+				ID:   "group",
+				Name: "group name",
+				// no Members
 				Syncables: []Syncable{{
 					Target: dummyST,
 				}},

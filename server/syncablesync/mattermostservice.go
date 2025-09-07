@@ -420,6 +420,24 @@ func (m *Mattermost) FetchGroupsAndSyncables(ctx context.Context) ([]Group, erro
 	return groups, nil
 }
 
+func (m *Mattermost) UnremovableUserIDs(ctx context.Context) ([]string, error) {
+	// For Mattermost, just use 'is system admin' as a proxy for 'should not be automatically removed from channels they shouldn't be in'.
+	// Note that if someone is promoted to a system admin at the same time as they would be removed from channels, then they will be removed in _that_ sync run.
+	srh := &mattermostSystemRoleHandler{api: m.API}
+	rms, err := srh.FetchRoster(ctx, SyncableTarget{
+		Type: mattermostSyncableTypeSystemRole,
+		ID:   "system_admin",
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, len(rms))
+	for n, rm := range rms {
+		out[n] = rm.UserID
+	}
+	return out, nil
+}
+
 func (m *Mattermost) getSystemBot(ctx context.Context) (*model.User, error) {
 	l := ctxlog.FromContext(ctx)
 	u, appErr := m.API.GetUserByUsername(model.BotSystemBotUsername)
