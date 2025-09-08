@@ -225,7 +225,7 @@ func TestFullSync(t *testing.T) {
 			}},
 		},
 	}, {
-		name: "doesn't remove 'unremovable' members (but does demote them)",
+		name: "doesn't remove 'unremovable' members",
 		s: &dummyService{
 			unremovable: []string{"user1", "user2"},
 			groups: []Group{{
@@ -247,7 +247,8 @@ func TestFullSync(t *testing.T) {
 		},
 		wantSyncableMembers: map[SyncableTarget][]RosterMember{
 			dummyST: {{
-				UserID: "user1",
+				UserID:  "user1",
+				IsAdmin: true,
 			}, {
 				UserID: "user2",
 			}},

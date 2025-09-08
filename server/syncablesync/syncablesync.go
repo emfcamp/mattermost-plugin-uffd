@@ -162,11 +162,10 @@ func (e *Engine) FullSync(ctx context.Context) error {
 			for uid, gotRM := range gotRosterMap {
 				if _, ok := wantRosterMap[uid]; !ok {
 					if unremovableUsers.Contains(uid) {
-						gotRM.IsAdmin = false
-						membersToUpdate = append(membersToUpdate, gotRM)
-					} else {
-						membersToDelete = append(membersToDelete, gotRM)
+						// Don't touch unremovable users at all.
+						continue
 					}
+					membersToDelete = append(membersToDelete, gotRM)
 				}
 			}
 		} else {
@@ -174,6 +173,10 @@ func (e *Engine) FullSync(ctx context.Context) error {
 			for uid, gotRM := range gotRosterMap {
 				if !gotRM.IsAdmin {
 					// If they're not already an admin then it doesn't matter.
+					continue
+				}
+				if unremovableUsers.Contains(uid) {
+					// Don't touch unremovable users at all.
 					continue
 				}
 				if _, ok := wantRosterMap[uid]; !ok {
