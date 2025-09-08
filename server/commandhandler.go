@@ -306,7 +306,8 @@ func (h *CommandHandler) executeCreate(ctx context.Context, c *plugin.Context, a
 		Admins: []datastore.ACLElement{{
 			Type:  datastore.ACLElementTypeTeamLead,
 			Value: foundTeam.Name,
-		}, {
+		}},
+		Members: []datastore.ACLElement{{
 			Type:  datastore.ACLElementTypeTeamMember,
 			Value: foundTeam.Name,
 		}},
