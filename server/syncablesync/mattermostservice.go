@@ -237,25 +237,28 @@ func (m *Mattermost) FetchGroupsAndSyncables(ctx context.Context) ([]Group, erro
 				ID:   ch.Id,
 				Name: ch.Name,
 			}
-		}
-		privName := t.Name + "-private"
-		if _, ok := knownChannels[privName]; !ok {
-			// Create the default private channel for this team.
-			ch, appErr := m.API.CreateChannel(&model.Channel{
-				TeamId:      theTeam.Id,
-				Type:        model.ChannelTypePrivate,
-				Name:        privName,
-				DisplayName: privName,
-			})
-			if appErr != nil {
-				return nil, fmt.Errorf("creating default private channel %v for team %v: %w", privName, t.Name, appErr)
-			}
-			allChannels = append(allChannels, ch)
-			knownChannels[t.Name] = ch.Id
-			defaultedChannels.Add(ch.Id)
-			channelInfo[ch.Id] = &datastore.ChannelInfo{
-				ID:   ch.Id,
-				Name: ch.Name,
+
+			// Only try to create the private channel if we created the public one.
+			// This ensures that we can delete the private channel if we don't need it.
+			privName := t.Name + "-private"
+			if _, ok := knownChannels[privName]; !ok {
+				// Create the default private channel for this team.
+				ch, appErr := m.API.CreateChannel(&model.Channel{
+					TeamId:      theTeam.Id,
+					Type:        model.ChannelTypePrivate,
+					Name:        privName,
+					DisplayName: privName,
+				})
+				if appErr != nil {
+					return nil, fmt.Errorf("creating default private channel %v for team %v: %w", privName, t.Name, appErr)
+				}
+				allChannels = append(allChannels, ch)
+				knownChannels[t.Name] = ch.Id
+				defaultedChannels.Add(ch.Id)
+				channelInfo[ch.Id] = &datastore.ChannelInfo{
+					ID:   ch.Id,
+					Name: ch.Name,
+				}
 			}
 		}
 
