@@ -335,12 +335,12 @@ func (p *Plugin) fetchChannelAndCheckPermission(userID, channelID string) (*mode
 		return nil, nil, permissionError("Your current channel is invalid.")
 	}
 
-	permissionRequired := model.PermissionManagePublicChannelProperties
+	permissionRequired := model.PermissionManagePublicChannelMembers
 	switch ch.Type {
 	case model.ChannelTypeOpen:
 		// Default.
 	case model.ChannelTypePrivate:
-		permissionRequired = model.PermissionManagePrivateChannelProperties
+		permissionRequired = model.PermissionManagePrivateChannelMembers
 	default:
 		return nil, nil, permissionError("You must be in a public/private channel to use this command.")
 	}
