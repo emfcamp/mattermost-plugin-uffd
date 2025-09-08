@@ -200,6 +200,27 @@ func (h *CommandHandler) executeRename(ctx context.Context, c *plugin.Context, a
 
 	ds := &datastore.MattermostDataStore{API: h.api}
 
+	if h.client.User.HasPermissionTo(args.UserId, model.PermissionManageSystem) {
+		// Superusers can do whatever they want.
+		chInfo, ok, err := ds.LoadChannel(ctx, ch.Id)
+		if err != nil {
+			return errResponsef("An error occurred while loading the channel's information: %v", err)
+		}
+		if ok {
+			chInfo.Name = newName
+			if err := ds.SaveChannel(ctx, chInfo); err != nil {
+				return errResponsef("An error occurred while saving the channel's information: %v", err)
+			}
+		}
+
+		ch.Name = newName
+		ch.DisplayName = newName
+		if err := h.client.Channel.Update(ch); err != nil {
+			return errResponsef("Renaming the channel failed: %v", err)
+		}
+		return &model.CommandResponse{}, nil
+	}
+
 	previousTeam, _ := teamFromChannelName(ctx, ds, ch.Name)
 	var foundTeam *syncengine.Team
 	if !isFreeForAllNamespace(newName) {
