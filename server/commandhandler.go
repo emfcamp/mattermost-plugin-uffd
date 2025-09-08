@@ -200,16 +200,21 @@ func (h *CommandHandler) executeRename(ctx context.Context, c *plugin.Context, a
 
 	ds := &datastore.MattermostDataStore{API: h.api}
 
-	foundTeam, err := teamFromChannelName(ctx, ds, newName)
-	switch {
-	case err != nil:
-		return errResponsef("An error occurred while checking for the team the channel belongs to: %v", err)
-	case foundTeam == nil:
-		return errResponsef("Channel names need to be begin with a team name")
-	case ch.Name == foundTeam.Name, ch.Name == foundTeam.Name+"-private":
-		return errResponsef("You can't rename the team default public or private channels")
-	case !h.authorizedForTeam(foundTeam, args.UserId):
-		return errResponsef("You aren't a team lead of %s, so you can't rename channels to belong with that name.", foundTeam.Name)
+	previousTeam, _ := teamFromChannelName(ctx, ds, ch.Name)
+	var foundTeam *syncengine.Team
+	if !isFreeForAllNamespace(newName) {
+		var err error
+		foundTeam, err = teamFromChannelName(ctx, ds, newName)
+		switch {
+		case err != nil:
+			return errResponsef("An error occurred while checking for the team the channel belongs to: %v", err)
+		case foundTeam == nil:
+			return errResponsef("Channel names need to be begin with a team name")
+		case ch.Name == foundTeam.Name, ch.Name == foundTeam.Name+"-private":
+			return errResponsef("You can't rename the team default public or private channels")
+		case !h.authorizedForTeam(foundTeam, args.UserId):
+			return errResponsef("You aren't a team lead of %s, so you can't rename channels to belong with that name.", foundTeam.Name)
+		}
 	}
 
 	chInfo, ok, err := ds.LoadChannel(ctx, ch.Id)
@@ -223,7 +228,6 @@ func (h *CommandHandler) executeRename(ctx context.Context, c *plugin.Context, a
 		}
 	}
 
-	oldName := ch.Name
 	ch.Name = newName
 	ch.DisplayName = newName
 	if err := h.client.Channel.Update(ch); err != nil {
@@ -231,13 +235,28 @@ func (h *CommandHandler) executeRename(ctx context.Context, c *plugin.Context, a
 	}
 
 	// If we renamed across teams then we need to run a sync.
-	if !strings.HasPrefix(oldName, foundTeam.Name) {
+	teamsEqual := func(t1, t2 *syncengine.Team) bool {
+		switch {
+		case (t1 == nil) != (t2 == nil):
+			// nilness is different, they're different
+			return false
+		case t1 == nil, t2 == nil:
+			// they're both nil
+			return true
+		}
+		return t1.Name != t2.Name
+	}
+	if !teamsEqual(foundTeam, previousTeam) {
 		if err := h.runSync(ctx, "channel-rename"); err != nil {
 			return errResponsef("An error occurred syncing membership information: %v", err)
 		}
 	}
 
 	return &model.CommandResponse{}, nil
+}
+
+func isFreeForAllNamespace(name string) bool {
+	return strings.HasPrefix(name, "misc-")
 }
 
 func teamFromChannelName(ctx context.Context, ds *datastore.MattermostDataStore, name string) (*syncengine.Team, error) {
@@ -275,14 +294,18 @@ func (h *CommandHandler) executeCreate(ctx context.Context, c *plugin.Context, a
 
 	ds := &datastore.MattermostDataStore{API: h.api}
 
-	foundTeam, err := teamFromChannelName(ctx, ds, newName)
-	switch {
-	case err != nil:
-		return errResponsef("An error occurred while checking for the team the channel belongs to: %v", err)
-	case foundTeam == nil:
-		return errResponsef("Channel names need to be begin with a team name")
-	case !h.authorizedForTeam(foundTeam, args.UserId):
-		return errResponsef("You aren't a team lead of %s, so you can't create channels that start with that name.", foundTeam.Name)
+	var foundTeam *syncengine.Team
+	if !isFreeForAllNamespace(newName) {
+		var err error
+		foundTeam, err = teamFromChannelName(ctx, ds, newName)
+		switch {
+		case err != nil:
+			return errResponsef("An error occurred while checking for the team the channel belongs to: %v", err)
+		case foundTeam == nil:
+			return errResponsef("Channel names need to be begin with a team name")
+		case !h.authorizedForTeam(foundTeam, args.UserId):
+			return errResponsef("You aren't a team lead of %s, so you can't create channels that start with that name.", foundTeam.Name)
+		}
 	}
 
 	ch := &model.Channel{
@@ -303,14 +326,24 @@ func (h *CommandHandler) executeCreate(ctx context.Context, c *plugin.Context, a
 		ID:                  ch.Id,
 		Name:                newName,
 		MembershipUnmanaged: false,
-		Admins: []datastore.ACLElement{{
+	}
+	if foundTeam != nil {
+		// This channel belongs to a team.
+		chInfo.Admins = []datastore.ACLElement{{
 			Type:  datastore.ACLElementTypeTeamLead,
 			Value: foundTeam.Name,
-		}},
-		Members: []datastore.ACLElement{{
+		}}
+		chInfo.Members = []datastore.ACLElement{{
 			Type:  datastore.ACLElementTypeTeamMember,
 			Value: foundTeam.Name,
-		}},
+		}}
+	} else {
+		// This channel does not belong to a team.
+		chInfo.MembershipUnmanaged = true
+		chInfo.Admins = []datastore.ACLElement{{
+			Type:  datastore.ACLElementTypeUser,
+			Value: args.UserId,
+		}}
 	}
 	if err := ds.SaveChannel(ctx, chInfo); err != nil {
 		return errResponsef("An error occurred saving additional channel information: %v", err)
