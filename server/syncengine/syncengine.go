@@ -139,6 +139,10 @@ func (s *SyncEngine) FullSyncGroups(ctx context.Context, c *Cache, out *Outcome)
 			if !ok {
 				return nil, fmt.Errorf("missing service user %v (in group %v / %v)", m, g.Name, g.GroupID)
 			}
+			if !serviceUser.Active {
+				// Don't include inactive users in any groups.
+				continue
+			}
 			sGroup.MemberUserIDs = append(sGroup.MemberUserIDs, serviceUser.ServiceUserID)
 		}
 		return sGroup, nil
