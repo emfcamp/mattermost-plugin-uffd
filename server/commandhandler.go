@@ -230,11 +230,11 @@ func (h *CommandHandler) executeRename(ctx context.Context, c *plugin.Context, a
 		case err != nil:
 			return errResponsef("An error occurred while checking for the team the channel belongs to: %v", err)
 		case foundTeam == nil:
-			return errResponsef("Channel names need to be begin with a team name")
+			return errResponsef("Channel names need to begin with a team name")
 		case ch.Name == foundTeam.Name, ch.Name == foundTeam.Name+"-private":
 			return errResponsef("You can't rename the team default public or private channels")
 		case !h.authorizedForTeam(foundTeam, args.UserId):
-			return errResponsef("You aren't a team lead of %s, so you can't rename channels to belong with that name.", foundTeam.Name)
+			return errResponsef("You aren't a team lead of %s, so you can't rename channels to begin with that name.", foundTeam.Name)
 		}
 	}
 
@@ -323,7 +323,7 @@ func (h *CommandHandler) executeCreate(ctx context.Context, c *plugin.Context, a
 		case err != nil:
 			return errResponsef("An error occurred while checking for the team the channel belongs to: %v", err)
 		case foundTeam == nil:
-			return errResponsef("Channel names need to be begin with a team name")
+			return errResponsef("Channel names need to begin with a team name")
 		case !h.authorizedForTeam(foundTeam, args.UserId):
 			return errResponsef("You aren't a team lead of %s, so you can't create channels that start with that name.", foundTeam.Name)
 		}
