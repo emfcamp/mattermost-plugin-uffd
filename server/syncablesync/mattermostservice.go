@@ -442,16 +442,15 @@ func (m *Mattermost) UnremovableUserIDs(ctx context.Context) ([]string, error) {
 
 	// For Mattermost, just use 'is system admin' as a proxy for 'should not be automatically removed from channels they shouldn't be in'.
 	// Note that if someone is promoted to a system admin at the same time as they would be removed from channels, then they will be removed in _that_ sync run.
-	srh := &mattermostSystemRoleHandler{api: m.API}
-	systemAdmins, err := srh.FetchRoster(ctx, SyncableTarget{
-		Type: mattermostSyncableTypeSystemRole,
-		ID:   "system_admin",
-	})
-	if err != nil {
-		return nil, err
-	}
-	for _, rm := range systemAdmins {
-		out.Add(rm.UserID)
+	if m.SystemAdminGroup != "" {
+		sg, ok, err := m.GroupStore.LoadGroup(ctx, m.SystemAdminGroup)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load SystemAdminGroup %q: %w", m.SystemAdminGroup, err)
+		} else if !ok {
+			return nil, fmt.Errorf("SystemAdminGroup set to %q but no group by that name in the KV store - does it actually exist?", m.SystemAdminGroup)
+		}
+
+		out.Add(sg.MemberUserIDs...)
 	}
 
 	// Exempt bots from being removed from things too.
