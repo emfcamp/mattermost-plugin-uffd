@@ -44,6 +44,7 @@ type mattermostAPI interface {
 	CreateChannel(channel *model.Channel) (*model.Channel, *model.AppError)
 	UpdateChannel(channel *model.Channel) (*model.Channel, *model.AppError)
 
+	GetBots(options *model.BotGetOptions) ([]*model.Bot, *model.AppError)
 	GetUserByUsername(name string) (*model.User, *model.AppError)
 	CreateSession(session *model.Session) (*model.Session, *model.AppError)
 }
@@ -437,21 +438,41 @@ func (m *Mattermost) FetchGroupsAndSyncables(ctx context.Context) ([]Group, erro
 }
 
 func (m *Mattermost) UnremovableUserIDs(ctx context.Context) ([]string, error) {
+	out := stringset.New()
+
 	// For Mattermost, just use 'is system admin' as a proxy for 'should not be automatically removed from channels they shouldn't be in'.
 	// Note that if someone is promoted to a system admin at the same time as they would be removed from channels, then they will be removed in _that_ sync run.
 	srh := &mattermostSystemRoleHandler{api: m.API}
-	rms, err := srh.FetchRoster(ctx, SyncableTarget{
+	systemAdmins, err := srh.FetchRoster(ctx, SyncableTarget{
 		Type: mattermostSyncableTypeSystemRole,
 		ID:   "system_admin",
 	})
 	if err != nil {
 		return nil, err
 	}
-	out := make([]string, len(rms))
-	for n, rm := range rms {
-		out[n] = rm.UserID
+	for _, rm := range systemAdmins {
+		out.Add(rm.UserID)
 	}
-	return out, nil
+
+	// Exempt bots from being removed from things too.
+	bots, err := paginator.FetchPaginated(perPageDefault, func(page, perPage int) ([]*model.Bot, error) {
+		bots, appErr := m.API.GetBots(&model.BotGetOptions{
+			Page:    page,
+			PerPage: perPage,
+		})
+		if appErr != nil {
+			return nil, appErr
+		}
+		return bots, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, rm := range bots {
+		out.Add(rm.UserId)
+	}
+
+	return out.Sorted(), nil
 }
 
 func (m *Mattermost) getSystemBot(ctx context.Context) (*model.User, error) {

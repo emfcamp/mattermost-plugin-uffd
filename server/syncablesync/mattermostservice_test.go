@@ -22,6 +22,7 @@ type fakeMattermost struct {
 	channelMembers map[string][]*model.ChannelMember
 	teamMembers    map[string][]*model.TeamMember
 	users          []*model.User
+	bots           []*model.Bot
 	teams          []*model.Team
 
 	kvStore map[string][]byte
@@ -267,6 +268,11 @@ func (f *fakeMattermost) CreateChannel(channel *model.Channel) (*model.Channel, 
 	channel.Id = fmt.Sprintf("channel:::%s:::%s", channel.TeamId, channel.Name)
 	f.channels[channel.Id] = channel
 	return channel, nil
+}
+
+// GetBots implements mattermostAPI.
+func (f *fakeMattermost) GetBots(options *model.BotGetOptions) ([]*model.Bot, *model.AppError) {
+	return slicePage(f.bots, options.Page, options.PerPage), nil
 }
 
 var _ mattermostAPI = ((*fakeMattermost)(nil))
