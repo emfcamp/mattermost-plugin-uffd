@@ -24,21 +24,21 @@
         "settings": [
 		{
 			"key": "EnableUserSync",
-			"display_name": "Whether or not user sync is enabled",
+			"display_name": "Enable user sync",
 			"type": "bool",
 			"help_text": "If enabled, new users will be created and removed users will be disabled. If disabled, user information will not be synced. Disabling this may lead to users that log in via OIDC SSO to end up with incorrect or surprising information in their profile.",
 			"default": true
 		},
 		{
 			"key": "EnableGroupSync",
-			"display_name": "Whether or not group sync is enabled",
+			"display_name": "Enable group sync",
 			"type": "bool",
 			"help_text": "If enabled, users will be added/removed from teams, channels, and system roles according to their group membership. Note that if user sync is disabled, users will be synced according to their group membership as of the last time user sync was enabled.",
 			"default": true
 		},
 		{
 			"key": "EnabledGroup",
-			"display_name": "Name of group that gates access to Mattermost in uffd",
+			"display_name": "Mattermost access group",
 			"type": "text",
 			"help_text": "The name of the group which gates access to Mattermost in uffd. If set, then users who are no longer in this group will have their Mattermost account disabled. If left empty, then users will only have their Mattermost account disabled if their uffd account is disabled. This group doesn't need to be matched by the sync regex.",
 			"placeholder": "mattermost_access",
@@ -46,7 +46,7 @@
 		},
 		{
 			"key": "SystemAdminGroup",
-			"display_name": "Name of uffd group that will grant System Admin permissions",
+			"display_name": "System Admin group",
 			"type": "text",
 			"help_text": "A group which will grant the System Admin role. If non-empty, then users in this group will be added to the System Admin role, and removed if they are not present in the group. This only affects users synced from the IdP: locally-created users will not be touched.",
 			"placeholder": "mattermost_admin",
@@ -54,7 +54,7 @@
 		},
 		{
 			"key": "ManagedTeam",
-			"display_name": "Name of team that is managed by the plugin",
+			"display_name": "Managed team",
 			"type": "text",
 			"help_text": "The URL slug name of the team that will be managed by this plugin.",
 			"placeholder": "emf",
