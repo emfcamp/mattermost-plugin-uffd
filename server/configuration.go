@@ -39,6 +39,12 @@ func (c *configurationDuration) UnmarshalJSON(data []byte) error {
 // If you add non-reference types to your configuration struct, be sure to rewrite Clone as a deep
 // copy appropriate for your types.
 type configuration struct {
+	// Whether or not user sync is enabled.
+	EnableUserSync bool
+
+	// Whether or not group sync is enabled.
+	EnableGroupSync bool
+
 	// EnabledGroup defines the name of a group that, if a user is present in it,
 	// causes the user to be enabled for Mattermost.
 	// This should usually match how the OIDC service is configured in uffd.

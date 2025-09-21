@@ -23,6 +23,20 @@
         "footer": "",
         "settings": [
 		{
+			"key": "EnableUserSync",
+			"display_name": "Whether or not user sync is enabled",
+			"type": "bool",
+			"help_text": "If enabled, new users will be created and removed users will be disabled. If disabled, user information will not be synced. Disabling this may lead to users that log in via OIDC SSO to end up with incorrect or surprising information in their profile.",
+			"default": true
+		},
+		{
+			"key": "EnableGroupSync",
+			"display_name": "Whether or not group sync is enabled",
+			"type": "bool",
+			"help_text": "If enabled, users will be added/removed from teams, channels, and system roles according to their group membership. Note that if user sync is disabled, users will be synced according to their group membership as of the last time user sync was enabled.",
+			"default": true
+		},
+		{
 			"key": "EnabledGroup",
 			"display_name": "Name of group that gates access to Mattermost in uffd",
 			"type": "text",

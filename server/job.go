@@ -29,50 +29,58 @@ func (p *Plugin) runSync(ctx context.Context, trigger string) error {
 
 	cfg := p.getConfiguration()
 
-	l.Info("Performing UFFD group sync")
+	if cfg.EnableUserSync {
+		l.Info("Performing UFFD sync")
 
-	var additionalGroups []string
-	if cfg.SystemAdminGroup != "" {
-		additionalGroups = append(additionalGroups, cfg.SystemAdminGroup)
+		var additionalGroups []string
+		if cfg.SystemAdminGroup != "" {
+			additionalGroups = append(additionalGroups, cfg.SystemAdminGroup)
+		}
+		se := &syncengine.SyncEngine{
+			IDP: &syncengine.UffdIDP{
+				API:          p.uffd,
+				EnabledGroup: cfg.EnabledGroup,
+			},
+			Service: &syncengine.MattermostService{
+				API: p.API,
+			},
+			GroupStore: &datastore.MattermostDataStore{
+				API: p.API,
+			},
+			AdditionalGroups: additionalGroups,
+		}
+		out, err := se.FullSync(ctx)
+		if err != nil {
+			l.WithError(err).Error("UFFD sync failed")
+			return err
+		}
+		l.WithFields(log.Fields{"outcome": out}).Info("UFFD sync complete")
+	} else {
+		l.Info("UFFD sync disabled in settings")
 	}
-	se := &syncengine.SyncEngine{
-		IDP: &syncengine.UffdIDP{
-			API:          p.uffd,
-			EnabledGroup: cfg.EnabledGroup,
-		},
-		Service: &syncengine.MattermostService{
-			API: p.API,
-		},
-		GroupStore: &datastore.MattermostDataStore{
-			API: p.API,
-		},
-		AdditionalGroups: additionalGroups,
-	}
-	out, err := se.FullSync(ctx)
-	if err != nil {
-		l.WithError(err).Error("UFFD group sync failed")
-		return err
-	}
-	l.WithFields(log.Fields{"outcome": out}).Info("UFFD group sync complete")
 
-	l.Info("Performing syncables sync")
-	siteURL := p.API.GetConfig().ServiceSettings.SiteURL
-	if siteURL == nil {
-		return fmt.Errorf("site url setting is missing")
+	if cfg.EnableGroupSync {
+		l.Info("Performing syncables sync")
+		siteURL := p.API.GetConfig().ServiceSettings.SiteURL
+		if siteURL == nil {
+			return fmt.Errorf("site url setting is missing")
+		}
+		ss := &syncablesync.Engine{
+			API: &syncablesync.Mattermost{
+				API:              p.API,
+				REST:             model.NewAPIv4Client(*siteURL),
+				GroupStore:       p.datastore(),
+				SystemAdminGroup: cfg.SystemAdminGroup,
+				ManagedTeam:      cfg.ManagedTeam,
+			},
+		}
+		if err := ss.FullSync(ctx); err != nil {
+			l.WithError(err).Error("Syncables sync failed")
+		}
+		l.Info("Syncables sync complete")
+	} else {
+		l.Info("Syncable sync disabled in settings")
 	}
-	ss := &syncablesync.Engine{
-		API: &syncablesync.Mattermost{
-			API:              p.API,
-			REST:             model.NewAPIv4Client(*siteURL),
-			GroupStore:       p.datastore(),
-			SystemAdminGroup: cfg.SystemAdminGroup,
-			ManagedTeam:      cfg.ManagedTeam,
-		},
-	}
-	if err := ss.FullSync(ctx); err != nil {
-		l.WithError(err).Error("Syncables sync failed")
-	}
-	l.Info("Syncables sync complete")
 
 	return nil
 }
