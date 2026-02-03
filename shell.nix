@@ -14,6 +14,12 @@ pkgs.mkShell {
     stdenv
     pkg-config
 
+    autoconf  # optipng/gifsicle
+    automake  # optipng/gifsicle
+    libtool  # optipng/gifsicle
+    zlib  # optipng/gifsicle
+    nasm  # optipng/gifiscle
+
     pixman  # node-canvas
     cairo  # node-canvas
     librsvg  # node-canvas
@@ -22,6 +28,8 @@ pkgs.mkShell {
   ];
 
   shellHook = ''
+    export LD=$CC
+
     test -e $HOME/.cache/mmlocal.sock && export MM_LOCALSOCKETPATH=$HOME/.cache/mmlocal.sock
     test -e /var/tmp/mattermost_local.socket && export MM_LOCALSOCKETPATH=/var/tmp/mattermost_local.socket
 
