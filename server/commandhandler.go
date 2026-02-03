@@ -56,9 +56,9 @@ func NewCommandHandler(p *Plugin) (*CommandHandler, error) {
 	}
 
 	{
-		createACD := model.NewAutocompleteData(createTrigger, "[name] [type]", "Create a new public/private channel")
+		createACD := model.NewAutocompleteData(createTrigger, "[name] [type]", "Create a new channel")
 		createACD.AddTextArgument("[name]", "[text]", "")
-		createACD.AddTextArgument("[type]", "[public/private]", "")
+		createACD.AddTextArgument("[type]", "[public/team/leads/empty]", "")
 		if err := c.client.SlashCommand.Register(&model.Command{
 			Trigger:          createTrigger,
 			DisplayName:      "create",
@@ -309,8 +309,8 @@ func (h *CommandHandler) executeCreate(ctx context.Context, c *plugin.Context, a
 	}
 
 	newType := bits[2]
-	if !map[string]bool{"public": true, "private": true}[newType] {
-		return errResponsef("Channel type should be one of public or private")
+	if !map[string]bool{"public": true, "team": true, "leads": true, "empty": true}[newType] {
+		return errResponsef("Channel type should be one of public, team, leads or empty")
 	}
 
 	ds := &datastore.MattermostDataStore{API: h.api}
@@ -348,8 +348,27 @@ func (h *CommandHandler) executeCreate(ctx context.Context, c *plugin.Context, a
 		Name:                newName,
 		MembershipUnmanaged: false,
 	}
-	if foundTeam != nil {
-		// This channel belongs to a team.
+	switch newType {
+	case "empty":
+		// 'empty' channels contain only the creator.
+		chInfo.Admins = []datastore.ACLElement{{
+			Type:  datastore.ACLElementTypeUser,
+			Value: args.UserId,
+		}}
+	case "leads":
+		// 'leads' channels contain the team leads only.
+		if foundTeam == nil {
+			return errResponsef("'leads' type channels must begin with the name of a team")
+		}
+		chInfo.Admins = []datastore.ACLElement{{
+			Type:  datastore.ACLElementTypeTeamLead,
+			Value: foundTeam.Name,
+		}}
+	case "team":
+		// 'team' channels contain leads and the team members.
+		if foundTeam == nil {
+			return errResponsef("'team' type channels must begin with the name of a team")
+		}
 		chInfo.Admins = []datastore.ACLElement{{
 			Type:  datastore.ACLElementTypeTeamLead,
 			Value: foundTeam.Name,
@@ -358,13 +377,24 @@ func (h *CommandHandler) executeCreate(ctx context.Context, c *plugin.Context, a
 			Type:  datastore.ACLElementTypeTeamMember,
 			Value: foundTeam.Name,
 		}}
-	} else {
-		// This channel does not belong to a team.
-		chInfo.MembershipUnmanaged = true
-		chInfo.Admins = []datastore.ACLElement{{
-			Type:  datastore.ACLElementTypeUser,
-			Value: args.UserId,
-		}}
+	case "public":
+		if foundTeam != nil {
+			// This channel belongs to a team.
+			chInfo.Admins = []datastore.ACLElement{{
+				Type:  datastore.ACLElementTypeTeamLead,
+				Value: foundTeam.Name,
+			}}
+			chInfo.Members = []datastore.ACLElement{{
+				Type:  datastore.ACLElementTypeTeamMember,
+				Value: foundTeam.Name,
+			}}
+		} else {
+			// This channel is teamless.
+			chInfo.Admins = []datastore.ACLElement{{
+				Type:  datastore.ACLElementTypeUser,
+				Value: args.UserId,
+			}}
+		}
 	}
 	if err := ds.SaveChannel(ctx, chInfo); err != nil {
 		return errResponsef("An error occurred saving additional channel information: %v", err)
